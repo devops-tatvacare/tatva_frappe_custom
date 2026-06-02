@@ -1,0 +1,30 @@
+---
+title: "Telephony"
+---
+
+Calls show up on a lead's **Calls** tab the same way messages show up on the WhatsApp tab — as rows in a doctype. For calls that doctype is **`CRM Call Log`**, and reading it is live on the API today.
+
+## The CRM Call Log
+
+One row per call, inbound or outbound. The fields an integrator cares about:
+
+- **`type`** — `Incoming` or `Outgoing`
+- **`status`** — `Initiated` / `Ringing` / `In Progress` / `Completed` / `Failed` / `Busy` / `No Answer`
+- **`from`** / **`to`** — the numbers
+- **`duration`** — call length in seconds
+- **`recording_url`** — the recording (private; patient PII)
+- **`telephony_medium`** — which provider placed the call
+- **`reference_doctype`** / **`reference_docname`** — the lead this call is linked to
+
+A row links to its lead through `reference_doctype` = `CRM Lead` and `reference_docname` = the lead's name — exactly like every other activity record. Read a lead's calls by filtering on those two fields.
+
+## Inbound vs outbound
+
+- **Inbound calls log themselves.** When a patient calls in, a provider webhook creates the `CRM Call Log` row and matches the number to a lead, so it appears on the Calls tab automatically — no integration work on your side.
+- **Outbound click-to-call** rings the agent first, then bridges to the patient (a phone bridge, not a browser softphone), and writes a matching log row that walks to a terminal status.
+
+## Status
+
+> **Building now.** Reading `CRM Call Log` works today. The provider integration — **Acefone** for automatic inbound logging and click-to-call — is in build. Until it deploys, `telephony_medium` has no `Acefone` value and the click-to-call endpoint below is not yet live.
+
+→ **API Reference:** [Telephony endpoints](/docs/api/telephony).

@@ -30,10 +30,19 @@
       ]
     },
     {
+      "name": "Channels",
+      "tags": [
+        "WhatsApp",
+        "Telephony"
+      ]
+    },
+    {
       "name": "Reference",
       "tags": [
         "Reference Data",
-        "Schema"
+        "Schema",
+        "Roles and Permissions",
+        "Tags"
       ]
     }
   ],
@@ -57,6 +66,22 @@
     {
       "name": "Schema",
       "description": "## Runtime schema introspection \u2014 don't hardcode field lists\n\nThe API docs you're reading lists every field on `CRM Lead` and the three profile children. But the source of truth is the LIVE Frappe doctype definition \u2014 and you can fetch it directly. Do this in your integration code so you adapt automatically when new fields are added.\n\n### Read a doctype's full definition\n\nEvery Frappe doctype is itself accessible via REST. Get the full schema (every field, type, options, validations) with:\n\n```bash\ncurl -H 'Authorization: token KEY:SECRET' \\\n     https://one.tatvacare.in/api/resource/DocType/CRM%20Lead\n```\n\nThe response includes a `data.fields[]` array \u2014 each entry is one field with attributes `fieldname`, `fieldtype` (`Data`/`Select`/`Link`/`Date`/`Datetime`/`Int`/`Float`/`Check`/`Currency`/`Small Text`/`Long Text`/`Table`/`Section Break`/`Column Break`/`Tab Break`/etc.), `label`, `reqd` (required), `options` (for Link: the target doctype name; for Select: newline-separated valid values), `permlevel` (0=anyone, 1=manager-only), and more.\n\nSame call works for the children \u2014 replace the name in the URL (URL-encode spaces):\n\n```\nGET /api/resource/DocType/CRM%20Plan%20Profile\nGET /api/resource/DocType/CRM%20Lab%20Profile\nGET /api/resource/DocType/CRM%20Care%20Providers%20Profile\nGET /api/resource/DocType/CRM%20Lead%20Substage\n```\n\n### List records of any doctype\n\nThe `/api/resource/<DocType>` pattern lists records:\n\n```bash\ncurl -H 'Authorization: token KEY:SECRET' \\\n     -G --data-urlencode 'filters=[[\"custom_psp_group\",\"=\",\"Anaya\"]]' \\\n        --data-urlencode 'fields=[\"name\",\"first_name\",\"mobile_no\",\"status\"]' \\\n        --data-urlencode 'limit_page_length=50' \\\n     https://one.tatvacare.in/api/resource/CRM%20Lead\n```\n\nSee [Read](/docs/api/leads) for the full filter / pagination syntax.\n\n### When schema changes happen\n\nWhen we add a field, you'll see it appear in the doctype definition. Your code keeps working \u2014 your existing writes succeed (new field is optional and nullable), your reads return the extra field which you can ignore until you're ready to consume it. We notify integrators via email before any **breaking** change (renames, deletes, validation tightening).\n\n### Beyond Lead\n\nThe entire Frappe REST pattern works for ANY doctype. If you discover a need (e.g. read `CRM Call Log` records linked to a lead), the same `/api/resource/<DocType>` pattern applies. The doctypes worth knowing about for an integrator:\n\n- `CRM Lead` (this spec's primary target)\n- `CRM Plan Profile`, `CRM Lab Profile`, `CRM Care Providers Profile` (children of Lead)\n- `CRM Lead Substage` (program-scoped substage master)\n- `CRM Vertical`, `CRM Group`, `CRM Program` (routing masters)\n- `CRM Lead Status`, `CRM Lead Source`, `CRM Lost Reason` (universal lookup masters)\n- `CRM Call Log`, `CRM Task`, `FCRM Note`, `Comment`, `Communication`, `ToDo` (activity-adjacent \u2014 read about them in Frappe's standard docs)\n- `File` (attachments \u2014 see [Attachments](/docs/api/files))\n\nIf you find yourself reaching for a non-Lead doctype, email Ops first \u2014 we want to know what use case you're hitting so we can document it (or wrap it in a saner endpoint)."
+    },
+    {
+      "name": "WhatsApp",
+      "description": "## WhatsApp on a lead\n\n> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nEvery WhatsApp message \u2014 inbound or outbound \u2014 is a row in the **`WhatsApp Message`** doctype, linked to its lead via `reference_doctype` + `reference_name`. So you read a conversation the same way you read anything else: a filtered `GET /api/resource/WhatsApp Message`.\n\nSending is doctype-driven too \u2014 inserting a `WhatsApp Message` row triggers the actual send behind the scenes, routed through **WATI** (our WhatsApp provider) so the team's existing templates and broadcasts keep working. Multi-sender is built in: one **`WhatsApp Account`** row per WhatsApp number, so different product lines can send from different numbers.\n\nSee [WhatsApp](/docs/whatsapp) in the Documentation tab for the full picture."
+    },
+    {
+      "name": "Telephony",
+      "description": "## Calls on a lead\n\nCalls are rows in **`CRM Call Log`**, linked to a lead via `reference_doctype` + `reference_docname`. **Reading call logs is live today.** A row carries `type` (Incoming/Outgoing), `status`, `from`/`to`, `duration`, and `recording_url` (private \u2014 patient PII).\n\nOutbound **click-to-call** and automatic inbound logging are provided by **Acefone**; that half is in build, so the click-to-call endpoint is badged planned and `telephony_medium` has no `Acefone` value until it deploys.\n\nSee [Telephony](/docs/telephony) in the Documentation tab."
+    },
+    {
+      "name": "Roles and Permissions",
+      "description": "## Inspect roles, scoping, and permissions\n\nA key acts **as a user** and runs that user's permission checks \u2014 it never bypasses them (see [Permissions in 60 seconds](/docs/frappe-permissions)). What a key can do is decided by three layers:\n\n- **Roles** \u2014 what actions (Read / Write / Create / Delete) on what doctypes.\n- **User Permissions** \u2014 which rows a user may see (row-level scoping, e.g. only `Anaya` leads).\n- **Field permlevels** \u2014 which fields a user may write (routing fields are level-1, manager-only).\n\nThese endpoints let you read all three so you know exactly what a key is allowed to do. See [Roles & permissions](/docs/roles-and-permissions) in the Documentation tab."
+    },
+    {
+      "name": "Tags",
+      "description": "## Label leads and find them fast\n\nTags are free-form labels on a lead (`vip`, `reactivation`, \u2026) \u2014 the quickest way to slice leads without adding a field. Frappe keeps them in two synced places: a denormalised `_user_tags` string on the lead (good for a quick `like` filter) and a **`Tag Link`** row per (tag, document) pair (the clean way to ask *which* leads carry a tag). The label vocabulary lives in the **`Tag`** doctype.\n\nAlways set/clear tags through the whitelisted `add_tag` / `remove_tag` methods so both stores stay consistent \u2014 never write `_user_tags` by hand. See [Tags](/docs/tags) in the Documentation tab."
     }
   ],
   "security": [
@@ -1028,6 +1053,230 @@
           "_server_messages": {
             "type": "string",
             "description": "JSON-encoded array of additional human-readable messages."
+          }
+        }
+      },
+      "CallLog": {
+        "type": "object",
+        "description": "One row in `CRM Call Log` \u2014 a single inbound or outbound call.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Frappe document id."
+          },
+          "id": {
+            "type": "string",
+            "description": "Provider call id."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Incoming",
+              "Outgoing"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "Initiated",
+              "Ringing",
+              "In Progress",
+              "Completed",
+              "Failed",
+              "Busy",
+              "No Answer",
+              "Queued",
+              "Canceled"
+            ]
+          },
+          "from": {
+            "type": "string",
+            "description": "Caller number."
+          },
+          "to": {
+            "type": "string",
+            "description": "Destination number."
+          },
+          "duration": {
+            "type": "integer",
+            "description": "Call length in seconds."
+          },
+          "recording_url": {
+            "type": "string",
+            "description": "Recording link (private \u2014 patient PII)."
+          },
+          "telephony_medium": {
+            "type": "string",
+            "description": "Provider that placed the call (`Manual` / `Twilio` / `Exotel`; `Acefone` once deployed)."
+          },
+          "caller": {
+            "type": "string",
+            "description": "Agent (Link to User)."
+          },
+          "receiver": {
+            "type": "string",
+            "description": "Agent (Link to User)."
+          },
+          "start_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reference_doctype": {
+            "type": "string",
+            "example": "CRM Lead"
+          },
+          "reference_docname": {
+            "type": "string",
+            "description": "The linked lead's name."
+          }
+        }
+      },
+      "WhatsAppMessage": {
+        "type": "object",
+        "description": "One row in `WhatsApp Message` \u2014 a single inbound or outbound WhatsApp message (planned surface).",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Incoming",
+              "Outgoing"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Message body (HTML)."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SENT",
+              "Delivered",
+              "Read",
+              "Replied",
+              "Failed"
+            ]
+          },
+          "from": {
+            "type": "string",
+            "description": "Sender number (inbound)."
+          },
+          "to": {
+            "type": "string",
+            "description": "Recipient number (outbound)."
+          },
+          "content_type": {
+            "type": "string",
+            "description": "text / image / document / video / audio / interactive / template."
+          },
+          "message_type": {
+            "type": "string",
+            "enum": [
+              "Manual",
+              "Template"
+            ]
+          },
+          "message_id": {
+            "type": "string",
+            "description": "Threading id used to match status updates."
+          },
+          "profile_name": {
+            "type": "string",
+            "description": "Sender display name."
+          },
+          "whatsapp_account": {
+            "type": "string",
+            "description": "Sending account / WhatsApp number (Link to WhatsApp Account)."
+          },
+          "reference_doctype": {
+            "type": "string",
+            "example": "CRM Lead"
+          },
+          "reference_name": {
+            "type": "string",
+            "description": "The linked lead's name."
+          }
+        }
+      },
+      "Role": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Sales Manager"
+          },
+          "role_name": {
+            "type": "string",
+            "example": "Sales Manager"
+          },
+          "disabled": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "desk_access": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ],
+            "description": "1 = can reach the Frappe desk/UI."
+          },
+          "is_custom": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          }
+        }
+      },
+      "UserPermission": {
+        "type": "object",
+        "description": "One row-level restriction \u2014 limits which records a user may see.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string",
+            "format": "email"
+          },
+          "allow": {
+            "type": "string",
+            "description": "The doctype the restriction is on.",
+            "example": "CRM Group"
+          },
+          "for_value": {
+            "type": "string",
+            "description": "The single value the user is scoped to.",
+            "example": "Anaya"
+          },
+          "applicable_for": {
+            "type": "string",
+            "description": "Restrict only when accessing this doctype (blank = everywhere)."
+          },
+          "apply_to_all_doctypes": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "is_default": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
           }
         }
       }
@@ -2079,6 +2328,711 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/resource/CRM Call Log": {
+      "get": {
+        "tags": [
+          "Telephony"
+        ],
+        "summary": "List a lead's call logs",
+        "description": "Read the calls linked to a lead. Filter by `reference_doctype` = `CRM Lead` and `reference_docname` = the lead's name.\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'filters=[[\"reference_doctype\",\"=\",\"CRM Lead\"],[\"reference_docname\",\"=\",\"CRM-LEAD-2026-00123\"]]' \\\n  --data-urlencode 'fields=[\"name\",\"type\",\"status\",\"from\",\"to\",\"duration\",\"start_time\"]' \\\n  https://one.tatvacare.in/api/resource/CRM%20Call%20Log\n```",
+        "parameters": [
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[[\"reference_doctype\",\"=\",\"CRM Lead\"],[\"reference_docname\",\"=\",\"CRM-LEAD-2026-00123\"]]"
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[\"name\",\"type\",\"status\",\"from\",\"to\",\"duration\"]"
+          },
+          {
+            "name": "limit_page_length",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CallLog"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/CRM Call Log/{name}": {
+      "get": {
+        "tags": [
+          "Telephony"
+        ],
+        "summary": "Read one call log",
+        "description": "Fetch a single call by its Frappe `name`, including `recording_url` and timestamps.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "abc123def4"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CallLog"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/method/tatva_crm.acefone.handler.make_acefone_call": {
+      "post": {
+        "tags": [
+          "Telephony"
+        ],
+        "summary": "Click-to-call a lead (planned)",
+        "description": "> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nRings the agent first, then bridges to the lead's `mobile_no` (a phone bridge, not a browser softphone). Creates a `CRM Call Log` row in `Initiated` and walks it to a terminal status via the Acefone webhook.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "lead"
+                ],
+                "properties": {
+                  "lead": {
+                    "type": "string",
+                    "example": "CRM-LEAD-2026-00123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Call initiated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        },
+                        "call_log": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/WhatsApp Message": {
+      "get": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "List a lead's WhatsApp messages (planned)",
+        "description": "> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nRead a lead's WhatsApp thread. Filter by `reference_doctype` = `CRM Lead` and `reference_name` = the lead's name (note: WhatsApp uses `reference_name`, calls use `reference_docname`).\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'filters=[[\"reference_doctype\",\"=\",\"CRM Lead\"],[\"reference_name\",\"=\",\"CRM-LEAD-2026-00123\"]]' \\\n  --data-urlencode 'order_by=creation asc' \\\n  https://one.tatvacare.in/api/resource/WhatsApp%20Message\n```",
+        "parameters": [
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[[\"reference_doctype\",\"=\",\"CRM Lead\"],[\"reference_name\",\"=\",\"CRM-LEAD-2026-00123\"]]"
+          },
+          {
+            "name": "order_by",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "creation asc"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WhatsAppMessage"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/WhatsApp Message/{name}": {
+      "get": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Read one WhatsApp message (planned)",
+        "description": "> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nFetch a single message by its Frappe `name`.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/WhatsAppMessage"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/method/send_whatsapp_to_lead": {
+      "post": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Send a WhatsApp message to a lead (planned)",
+        "description": "> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nSend a session message or an approved template to a lead. Under the hood this inserts a `WhatsApp Message` row, which triggers the WATI send and threads delivery status back onto the same row. The exact method signature is finalised with the WATI rollout; the body below is the intended shape.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "lead"
+                ],
+                "properties": {
+                  "lead": {
+                    "type": "string",
+                    "example": "CRM-LEAD-2026-00123"
+                  },
+                  "template_name": {
+                    "type": "string",
+                    "example": "document_approved",
+                    "description": "For a template send."
+                  },
+                  "message": {
+                    "type": "string",
+                    "description": "For a free-text session message (24h window)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Queued for send.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "$ref": "#/components/schemas/WhatsAppMessage"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/Role": {
+      "get": {
+        "tags": [
+          "Roles and Permissions"
+        ],
+        "summary": "List roles",
+        "description": "Every role defined on the site. The `name` of a role is what you'd assign to a user.",
+        "parameters": [
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[[\"disabled\",\"=\",0]]"
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[\"name\",\"desk_access\",\"is_custom\"]"
+          },
+          {
+            "name": "limit_page_length",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 200
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Role"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/User/{email}": {
+      "get": {
+        "tags": [
+          "Roles and Permissions"
+        ],
+        "summary": "Read a user's roles",
+        "description": "Fetch a user document by email. The returned doc includes a `roles` child table \u2014 the list of roles that user holds, which is what decides their capabilities.\n\n```bash\ncurl -H 'Authorization: token KEY:SECRET' \\\n  'https://one.tatvacare.in/api/resource/User/mytatva-writer@tatvacare.in'\n```",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "email"
+            },
+            "example": "mytatva-writer@tatvacare.in"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User doc with embedded `roles[]`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "format": "email"
+                        },
+                        "enabled": {
+                          "type": "integer",
+                          "enum": [
+                            0,
+                            1
+                          ]
+                        },
+                        "full_name": {
+                          "type": "string"
+                        },
+                        "roles": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "role": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/User Permission": {
+      "get": {
+        "tags": [
+          "Roles and Permissions"
+        ],
+        "summary": "List record-level scoping (User Permissions)",
+        "description": "The row-level restrictions in force. Filter by `user` to see exactly which records a key's user is scoped to. No rows for a user = unrestricted (a manager who sees everything).\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'filters=[[\"user\",\"=\",\"agent-anaya@tatvacare.in\"]]' \\\n  https://one.tatvacare.in/api/resource/User%20Permission\n```",
+        "parameters": [
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[[\"user\",\"=\",\"agent-anaya@tatvacare.in\"]]"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserPermission"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/method/frappe.client.has_permission": {
+      "get": {
+        "tags": [
+          "Roles and Permissions"
+        ],
+        "summary": "Check a permission",
+        "description": "Ask whether the **current key's user** has a given permission on a doctype (optionally a specific record). Returns `{\"message\": {\"has_permission\": 1}}` or `0`. Use it to fail fast in your integration before attempting a write.",
+        "parameters": [
+          {
+            "name": "doctype",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "CRM Lead"
+          },
+          {
+            "name": "docname",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional \u2014 check on a specific record."
+          },
+          {
+            "name": "perm_type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "write",
+            "description": "read / write / create / delete \u2026 (default read)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Permission verdict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "object",
+                      "properties": {
+                        "has_permission": {
+                          "type": "integer",
+                          "enum": [
+                            0,
+                            1
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/Tag": {
+      "get": {
+        "tags": [
+          "Tags"
+        ],
+        "summary": "List all tags in use",
+        "description": "The tag vocabulary \u2014 one row per distinct label across the site.",
+        "parameters": [
+          {
+            "name": "limit_page_length",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 200
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/LookupItem"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/Tag Link": {
+      "get": {
+        "tags": [
+          "Tags"
+        ],
+        "summary": "Find which leads carry a tag (quick check)",
+        "description": "One row per (tag, document) pair. Filter by `tag` to get every lead that carries it \u2014 the clean way to pull a tagged cohort.\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'filters=[[\"tag\",\"=\",\"vip\"],[\"document_type\",\"=\",\"CRM Lead\"]]' \\\n  --data-urlencode 'fields=[\"document_name\",\"tag\"]' \\\n  https://one.tatvacare.in/api/resource/Tag%20Link\n```",
+        "parameters": [
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[[\"tag\",\"=\",\"vip\"],[\"document_type\",\"=\",\"CRM Lead\"]]"
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[\"document_name\",\"tag\"]"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "document_type": {
+                            "type": "string",
+                            "example": "CRM Lead"
+                          },
+                          "document_name": {
+                            "type": "string",
+                            "example": "CRM-LEAD-2026-00123"
+                          },
+                          "tag": {
+                            "type": "string",
+                            "example": "vip"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/method/frappe.desk.doctype.tag.tag.add_tag": {
+      "post": {
+        "tags": [
+          "Tags"
+        ],
+        "summary": "Tag a lead",
+        "description": "Add a tag to a document. Keeps `_user_tags` and `Tag Link` in sync \u2014 the only correct way to set a tag.\n\n```bash\ncurl -X POST -H 'Authorization: token KEY:SECRET' \\\n  -d 'tag=vip' -d 'dt=CRM Lead' -d 'dn=CRM-LEAD-2026-00123' \\\n  https://one.tatvacare.in/api/method/frappe.desk.doctype.tag.tag.add_tag\n```",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "tag",
+                  "dt",
+                  "dn"
+                ],
+                "properties": {
+                  "tag": {
+                    "type": "string",
+                    "example": "vip"
+                  },
+                  "dt": {
+                    "type": "string",
+                    "example": "CRM Lead",
+                    "description": "The doctype."
+                  },
+                  "dn": {
+                    "type": "string",
+                    "example": "CRM-LEAD-2026-00123",
+                    "description": "The document name."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tag added (returns the tag name).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "vip"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/method/frappe.desk.doctype.tag.tag.remove_tag": {
+      "post": {
+        "tags": [
+          "Tags"
+        ],
+        "summary": "Untag a lead",
+        "description": "Remove a tag from a document. Same arguments as `add_tag`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "tag",
+                  "dt",
+                  "dn"
+                ],
+                "properties": {
+                  "tag": {
+                    "type": "string",
+                    "example": "vip"
+                  },
+                  "dt": {
+                    "type": "string",
+                    "example": "CRM Lead"
+                  },
+                  "dn": {
+                    "type": "string",
+                    "example": "CRM-LEAD-2026-00123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tag removed."
           }
         }
       }

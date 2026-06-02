@@ -1,0 +1,27 @@
+---
+title: "WhatsApp"
+---
+
+The CRM has a WhatsApp panel on every lead — agents chat with patients, send approved templates, and watch delivery status, all without leaving the lead. This page explains how that works underneath and what an integrator can read.
+
+## The one idea: it's just a doctype
+
+Every WhatsApp message — inbound or outbound — is a row in the **`WhatsApp Message`** doctype. The lead's WhatsApp tab simply lists the rows whose `reference_doctype` + `reference_name` point at that lead. Because it's a doctype, you read a whole conversation over the same REST API as everything else. The fields that matter:
+
+- **`message`** — the body
+- **`type`** — `Incoming` or `Outgoing`
+- **`status`** — `SENT` / `Delivered` / `Read` / `Replied` / `Failed`
+- **`from`** / **`to`** — the two numbers
+- **`whatsapp_account`** — which sender (WhatsApp number) it went through
+
+## How sending works
+
+The CRM never calls a WhatsApp provider directly. It **inserts a `WhatsApp Message` row**, and a transport layer behind the doctype does the actual send. We route that transport through **WATI** (our WhatsApp provider) so the chat experience, templates, and broadcasts the team already uses keep working unchanged.
+
+Multi-sender is built in: one **`WhatsApp Account`** row per WhatsApp number, so different product lines or programs can send from different numbers. Inbound messages are matched back to the right account by the number that received them.
+
+## Status
+
+> **Building now.** The WhatsApp surface ships with the WATI rollout. The `WhatsApp Message` doctype is **not yet live** on the API, so the endpoints below return `404` until it deploys — they document the contract you'll integrate against. Track progress with CRM Ops.
+
+→ **API Reference:** [WhatsApp endpoints](/docs/api/whatsapp). The read pattern is identical to [reading a lead](/docs/api/leads#read-one-lead-with-embedded-profile-rows) — a filtered list against a doctype.

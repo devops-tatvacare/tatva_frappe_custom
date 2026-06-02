@@ -1,0 +1,31 @@
+---
+title: "Roles & permissions"
+---
+
+[Permissions in 60 seconds](/docs/frappe-permissions) covers the one rule you must internalise: **a key acts as a user, and never bypasses permissions.** This page is the reference — the role model behind the CRM, and the endpoints to inspect exactly what a key can do.
+
+## What decides what a key can do
+
+Three layers stack, from coarse to fine:
+
+1. **Roles** — what *actions* on what *doctypes*. A role grants Read / Write / Create / Delete (and more) per doctype. A user's effective access is the union of all their roles.
+2. **User Permissions** — *which rows* a user may see. This is row-level scoping: a user restricted to `for_value = Anaya` on `CRM Group` only sees Anaya's leads. A user with no such row sees everything.
+3. **Field permlevels** — *which fields* a user may write. Routing fields like `custom_vertical` sit at `permlevel=1`; only roles granted level-1 write can set them. A lower-privileged key silently drops them — see [Leads](/docs/api/leads).
+
+## The role tiers in this CRM
+
+- **Super Admin** (`System Manager`) — full access; the tier integration keys use, so they can write the permission-locked routing fields.
+- **CRM Admin** — manages CRM configuration and all leads, without server administration.
+- **Group / Program Admin** — full access scoped to one group or program via User Permissions.
+- **Regular User** — works their own scoped queue.
+
+## Inspect it over the API
+
+You can read the whole picture instead of guessing:
+
+- **Who am I?** [`get_logged_user`](/docs/api/authentication#verify-api-key-handshake) returns the user your key acts as.
+- **What roles does that user hold?** Read the User doc — its `roles` child table lists them.
+- **What rows are they scoped to?** List `User Permission` filtered by `user`.
+- **Can they do one specific thing?** Ask `has_permission` directly, before you attempt the write.
+
+→ **API Reference:** [Roles & permissions endpoints](/docs/api/roles-and-permissions).
