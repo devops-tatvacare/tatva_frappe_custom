@@ -97,12 +97,17 @@ class WATIWhatsAppMessage(WhatsAppMessage):
 		wati.assert_wati(account)
 		wati.assert_enabled()
 		template = frappe.get_doc("WhatsApp Templates", self.template)
+		params = self._wati_body_parameters(template)
+		# Save the resolved values so the CRM WhatsApp tab renders {{N}} filled
+		# (crm substitutes the display from template_parameters).
+		if params:
+			self.template_parameters = json.dumps([p["value"] for p in params])
 		resp = wati.send_template_message(
 			account,
 			to_number=wati.normalize_number(self.to),
 			template_name=template.actual_name or template.template_name,
 			broadcast_name=f"crm_{frappe.scrub(self.template)}",
-			parameters=self._wati_body_parameters(template),
+			parameters=params,
 		)
 		self._wati_apply_response(resp)
 
@@ -122,6 +127,16 @@ class WATIWhatsAppMessage(WhatsAppMessage):
 			)
 		return super().notify(data)
 
+	def send_read_receipt(self):
+		"""No-Meta backstop: upstream POSTs a read receipt to Meta's Graph API.
+
+		WATI has no read-receipt endpoint on our contract, so for a WATI account
+		this is a no-op — never fall through to super() (which would reach Meta).
+		"""
+		if self._wati_account() is not None:
+			return None
+		return super().send_read_receipt()
+
 	# --- helpers ---
 	def _wati_body_parameters(self, template):
 		"""Resolve template body placeholders into WATI's [{name, value}] shape.
@@ -130,52 +145,80 @@ class WATIWhatsAppMessage(WhatsAppMessage):
 		or the reference doc), named positionally ("1","2",...). Empty for a
 		static-body template.
 		"""
-		values = []
-		field_names = (template.field_names or "").split(",") if template.field_names else []
+		# Primary path: explicit body_param keyed by the real {{N}} index.
+		# Preserve the original key as the WATI param name — do NOT renumber to
+		# 1..N, or a template with non-contiguous slots ({{1}},{{3}}) sends the
+		# wrong value. Send "" for an empty slot rather than dropping it (dropping
+		# would shift every later slot).
 		if self.body_param:
 			try:
-				values = list(json.loads(self.body_param).values())
+				bp = json.loads(self.body_param)
 			except Exception:
-				values = []
-		elif self.flags.get("custom_ref_doc") and field_names:
+				return []
+			return [
+				{"name": str(k), "value": "" if bp[k] is None else str(bp[k])}
+				for k in sorted(bp, key=lambda x: int(x))
+			]
+		# Fallback: positional values resolved from field_names (notification /
+		# automated path). field_names is ordered to match {{1}},{{2}},… by the
+		# operator, so positional naming is correct here.
+		field_names = (template.field_names or "").split(",") if template.field_names else []
+		if not field_names:
+			return []
+		if self.flags.get("custom_ref_doc"):
 			cv = self.flags.custom_ref_doc
 			values = [cv.get(fn.strip()) for fn in field_names]
-		elif self.reference_doctype and self.reference_name and field_names:
+		elif self.reference_doctype and self.reference_name:
 			ref = frappe.get_doc(self.reference_doctype, self.reference_name)
 			values = [ref.get_formatted(fn.strip()) for fn in field_names]
+		else:
+			return []
 		return [
-			{"name": str(i + 1), "value": v}
+			{"name": str(i + 1), "value": "" if v is None else str(v)}
 			for i, v in enumerate(values)
-			if v is not None
 		]
 
 	def _wati_apply_response(self, resp):
-		"""WATI returns HTTP 200 with {"result": bool, ...}; map onto the row.
+		"""Map a WATI send response onto the row. Success -> store the message id.
 
-		Success -> store local_message_id (status webhooks thread on its camelCase
-		form). result:false (e.g. "Not enough credits") -> raise, status=Failed.
+		WATI is inconsistent across endpoints: template send returns
+		{"result": true}; session-file send returns {"result": "<id-string>"}
+		(no `ok` key); some session endpoints add {"ok": true}. Errors come back
+		as {"result": false, ...} / {"ok": false, ...} (HTTP 200) or as a body our
+		`api._post` normalised to {"result": false, "info": ...} on a 4xx/timeout.
+
+		Rule: an explicit false flag, a non-dict, or an empty/falsy `result` with
+		no truthy `ok` is a failure; anything else succeeded.
 		"""
-		ok = resp.get("ok") if isinstance(resp, dict) else None
-		result = resp.get("result") if isinstance(resp, dict) else None
-		# Template send -> result:true; file send -> ok:true + result:"<string>";
-		# error (credits/session/bad-params) -> result:false / ok:false.
+		if not isinstance(resp, dict):
+			self.status = "failed"
+			frappe.throw(_("WATI send failed: {0}").format(str(resp)[:400]), title=_("WATI Error"))
+
+		ok = resp.get("ok")
+		result = resp.get("result")
 		failed = (
-			not isinstance(resp, dict)
-			or ok is False
+			ok is False
 			or result is False
-			or (ok is None and result in (None, "", "false", "False"))
+			or (ok is not True and result in (None, "", "false", "False", 0))
 		)
 		if failed:
-			info = resp.get("info") if isinstance(resp, dict) else None
+			info = resp.get("info")
 			if not info and isinstance(resp.get("message"), str):
 				info = resp.get("message")
-			self.status = "Failed"
+			self.status = "failed"
 			frappe.throw(
 				_("WATI send failed: {0}").format(info or json.dumps(resp)),
 				title=_("WATI Error"),
 			)
+
 		msg = resp.get("message") if isinstance(resp.get("message"), dict) else {}
-		message_id = resp.get("local_message_id") or msg.get("localMessageId") or msg.get("whatsappMessageId")
+		message_id = (
+			resp.get("local_message_id")
+			or msg.get("localMessageId")
+			or msg.get("whatsappMessageId")
+			# file sends return the id as the `result` string itself.
+			or (result if isinstance(result, str) and result not in ("true", "false") else None)
+		)
 		if message_id:
 			self.message_id = message_id
-		self.status = "Success"
+		self.status = "sent"

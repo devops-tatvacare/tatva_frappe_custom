@@ -22,6 +22,14 @@ override_whitelisted_methods = {
 	"frappe_whatsapp.frappe_whatsapp.doctype.whatsapp_templates.whatsapp_templates.fetch": "tatva_connect.wati.templates_sync.sync_from_wati",
 }
 
+# Safety-net: re-sync every WATI account's templates every 6 hours so the local
+# mirror is almost always current (manual "Sync from WATI" stays real-time).
+scheduler_events = {
+	"cron": {
+		"0 */6 * * *": ["tatva_connect.wati.templates_sync.scheduled_sync_all"],
+	},
+}
+
 # Schema-as-code: the custom_is_wati flag on WhatsApp Account ships as a fixture
 # (the WATI Settings doctype ships as its own doctype JSON in this app).
 fixtures = [

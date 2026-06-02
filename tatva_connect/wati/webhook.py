@@ -24,14 +24,17 @@ import frappe
 
 from tatva_connect.wati import api as wati
 
-# WATI event names that carry a delivery/read status, keyed by localMessageId.
-STATUS_EVENTS = {
-	"templateMessageSent_v2",
-	"sentMessageDELIVERED_v2",
-	"sentMessageREAD_v2",
-	"sentMessageREPLIED_v2",
-	"templateMessageFailed",
+# WATI status event -> the status vocab the CRM WhatsApp tab renders
+# (sent/Success -> single tick; delivered/read -> double tick, read = blue;
+# failed -> error). Driven by eventType so a missing `statusString` still maps.
+STATUS_BY_EVENT = {
+	"templateMessageSent_v2": "sent",
+	"sentMessageDELIVERED_v2": "delivered",
+	"sentMessageREAD_v2": "read",
+	"sentMessageREPLIED_v2": "read",
+	"templateMessageFailed": "failed",
 }
+STATUS_EVENTS = set(STATUS_BY_EVENT)
 
 _FALSY = {False, "false", "False", 0, "0", None, ""}
 
@@ -49,11 +52,11 @@ def _lead_for_number(wa_digits: str):
 	)
 
 
-def _account_for_channel(channel_number):
-	"""Map the WABA number that received the message -> its WhatsApp Account."""
+def _account_for_channel(channel_number, account_hint=None):
+	"""Map the inbound message -> its WhatsApp Account (hint > channel > single-tenant)."""
 	from tatva_connect.wati import routing
 
-	return routing.account_for_channel(channel_number)
+	return routing.account_for_channel(channel_number, account_hint)
 
 
 def _is_crm_relevant(event: dict) -> bool:
@@ -85,11 +88,16 @@ def webhook(**kwargs):
 			raise frappe.PermissionError("Invalid WATI webhook token")
 
 	# Flat JSON payload -> plain dict (drop Frappe/query keys).
-	event = {k: v for k, v in frappe.form_dict.items() if k not in ("cmd", "token")}
+	event = {k: v for k, v in frappe.form_dict.items() if k not in ("cmd", "token", "account")}
 
 	# Membership filter: drop non-CRM traffic with a 200 (zero rows written).
 	if not _is_crm_relevant(event):
 		return "ok"
+
+	# Which tenant received this? Read from the per-tenant webhook URL
+	# (?account=<WhatsApp Account name>), operator-controlled — so inbound
+	# attribution never depends on an unverified WATI payload field.
+	account_hint = frappe.request.args.get("account") if frappe.request else None
 
 	# Offload the survivor; return immediately.
 	# NB: 'payload' (not 'event') — 'event' is a reserved kwarg of frappe.enqueue
@@ -98,26 +106,52 @@ def webhook(**kwargs):
 		"tatva_connect.wati.webhook.process_event",
 		queue="short",
 		payload=event,
+		account_hint=account_hint,
 	)
 	return "ok"
 
 
-def process_event(payload: dict):
+def process_event(payload: dict, account_hint=None):
 	"""Background worker: persist one CRM-relevant event."""
 	if payload.get("eventType") == "message" and _falsy(payload.get("owner")):
-		_ingest_inbound(payload)
+		_ingest_inbound(payload, account_hint)
 	elif payload.get("localMessageId"):
 		_update_status(payload)
 
 
-def _ingest_inbound(event: dict):
+def _already_ingested(event: dict) -> bool:
+	"""Idempotency — WATI redelivers. Prefer the wamid; fall back to a composite
+	key (conversation + sender + text) when the payload lacks one."""
 	wamid = event.get("whatsappMessageId")
-	# Idempotent: WATI redelivers.
-	if wamid and frappe.db.exists("WhatsApp Message", {"message_id": wamid}):
+	if wamid:
+		return bool(frappe.db.exists("WhatsApp Message", {"message_id": wamid}))
+	return bool(
+		frappe.db.exists(
+			"WhatsApp Message",
+			{
+				"type": "Incoming",
+				"conversation_id": event.get("conversationId"),
+				"from": event.get("waId"),
+				"message": event.get("text"),
+			},
+		)
+	)
+
+
+def _ingest_inbound(event: dict, account_hint=None):
+	if _already_ingested(event):
 		return
 	lead = _lead_for_number(wati.normalize_number(event.get("waId")))
 	if not lead:
 		return
+	account = _account_for_channel(event.get("channelPhoneNumber"), account_hint)
+	if not account:
+		# Don't drop a real customer message; store it (the lead tab links by
+		# reference, not account) and flag the unresolved tenant for the operator.
+		frappe.log_error(
+			title="WATI inbound: unresolved account",
+			message=f"waId={event.get('waId')} channel={event.get('channelPhoneNumber')} hint={account_hint}",
+		)
 	frappe.get_doc(
 		{
 			"doctype": "WhatsApp Message",
@@ -125,10 +159,10 @@ def _ingest_inbound(event: dict):
 			"from": event.get("waId"),
 			"message": event.get("text"),
 			"content_type": event.get("type") or "text",
-			"message_id": wamid,
+			"message_id": event.get("whatsappMessageId"),
 			"conversation_id": event.get("conversationId"),
 			"profile_name": event.get("senderName"),
-			"whatsapp_account": _account_for_channel(event.get("channelPhoneNumber")),
+			"whatsapp_account": account,
 			"reference_doctype": "CRM Lead",
 			"reference_name": lead,
 		}
@@ -140,7 +174,9 @@ def _update_status(event: dict):
 	row = frappe.db.get_value("WhatsApp Message", {"message_id": event.get("localMessageId")}, "name")
 	if not row:
 		return
-	status = event.get("statusString")
-	if status:
-		frappe.db.set_value("WhatsApp Message", row, "status", status, update_modified=False)
-		frappe.db.commit()
+	# Map by eventType (robust to a missing statusString — e.g. failures).
+	status = STATUS_BY_EVENT.get(event.get("eventType"))
+	if not status:
+		return
+	frappe.db.set_value("WhatsApp Message", row, "status", status, update_modified=False)
+	frappe.db.commit()

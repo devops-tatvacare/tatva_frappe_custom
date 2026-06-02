@@ -1,0 +1,312 @@
+"""Whitelisted endpoints for the WATI template-variable fill dialog.
+
+Both read/write only local data — no WATI template fetch at send time, so no
+rate-limit exposure. Called from the CRM Form Script (a fixture), not from any
+crm source change.
+"""
+import json
+import re
+
+import frappe
+
+
+@frappe.whitelist()
+def list_templates(reference_doctype=None, reference_name=None):
+	"""Approved templates for the picker — SCOPED to the lead's routed WATI account.
+
+	Each WATI tenant has its own template namespace; a template approved on one
+	tenant cannot be sent from another. So we resolve the lead's account first and
+	list only that account's templates. No route -> empty list (the lead can't be
+	sent to anyway; set_whatsapp_account would raise at send time).
+
+	Returns [{name, label, vars, category}] — `name` is the (account-scoped)
+	record id passed to the next calls; `label` is the clean template name shown
+	to the agent.
+	"""
+	account = None
+	if reference_doctype and reference_name:
+		from crm.api.whatsapp import validate_access
+
+		validate_access(reference_doctype, reference_name)
+		if reference_doctype == "CRM Lead":
+			from tatva_connect.wati import routing
+
+			account = routing.resolve_account_for_lead(
+				frappe.get_cached_doc(reference_doctype, reference_name)
+			)
+		if not account:
+			return []
+
+	filters = {"status": "APPROVED"}
+	if account:
+		filters["whatsapp_account"] = account
+	rows = frappe.get_all(
+		"WhatsApp Templates",
+		filters=filters,
+		fields=["name", "actual_name", "template", "category"],
+		order_by="category asc, actual_name asc",
+	)
+	out = []
+	for r in rows:
+		n = len({int(m) for m in re.findall(r"\{\{\s*(\d+)\s*\}\}", r.template or "")})
+		out.append(
+			{
+				"name": r.name,
+				"label": r.actual_name or r.name,
+				"vars": n,
+				"category": (r.category or "OTHER"),
+			}
+		)
+	return out
+
+
+@frappe.whitelist()
+def get_template_variables(template):
+	"""Return the {{N}} slots for a template, parsed from the LOCAL mirror.
+
+	[{index, hint}] where hint is the WATI sample value for that slot (from
+	sample_values). No WATI API call.
+	"""
+	doc = frappe.get_cached_doc("WhatsApp Templates", template)
+	body = doc.template or ""
+	indexes = sorted({int(m) for m in re.findall(r"\{\{\s*(\d+)\s*\}\}", body)})
+	hints = _parse_hints(doc.sample_values)
+	variables = [{"index": i, "hint": hints.get(str(i), "")} for i in indexes]
+	return {"template": template, "body": body, "variables": variables}
+
+
+def _parse_hints(sample_values):
+	"""sample_values is a JSON object keyed by param name ({"1": "...", ...}).
+
+	Falls back to legacy comma-joined values (positional) for rows synced before
+	the JSON format. Returns a {str(index): hint} map.
+	"""
+	if not sample_values:
+		return {}
+	try:
+		parsed = json.loads(sample_values)
+	except Exception:
+		parts = [h.strip() for h in sample_values.split(",")]
+		return {str(i + 1): v for i, v in enumerate(parts)}
+	if isinstance(parsed, dict):
+		return {str(k): v for k, v in parsed.items()}
+	if isinstance(parsed, list):
+		return {str(i + 1): v for i, v in enumerate(parsed)}
+	return {}
+
+
+_VALUE_TYPES = (
+	"Data", "Select", "Small Text", "Text", "Link", "Int", "Float",
+	"Currency", "Date", "Datetime", "Phone", "Read Only",
+)
+
+
+def _field_options(doc, group):
+	opts = []
+	for df in doc.meta.fields:
+		if df.fieldtype in _VALUE_TYPES and not df.get("hidden"):
+			val = doc.get(df.fieldname)
+			if val not in (None, ""):
+				opts.append({"label": df.label or df.fieldname, "value": str(val)})
+	return {"group": group, "options": opts} if opts else None
+
+
+@frappe.whitelist()
+def get_field_options(reference_doctype, reference_name):
+	"""Lead + profile field values for the variable-mapping dropdown.
+
+	Grouped (Lead / Plan / Lab / Care Providers); each option carries the
+	field's CURRENT value so picking it fills the variable. Read-only.
+	"""
+	from crm.api.whatsapp import validate_access
+
+	# Gate access: without this any authenticated user could read any lead's
+	# field values (PII) through this endpoint.
+	validate_access(reference_doctype, reference_name)
+	doc = frappe.get_doc(reference_doctype, reference_name)
+	groups = []
+	lead = _field_options(doc, "Lead")
+	if lead:
+		groups.append(lead)
+	for fieldname, label in (
+		("custom_plan_profile", "Plan Profile"),
+		("custom_lab_profile", "Lab Profile"),
+		("custom_care_providers_profile", "Care Providers"),
+	):
+		rows = doc.get(fieldname) or []
+		if rows:
+			g = _field_options(rows[0], label)
+			if g:
+				groups.append(g)
+	return groups
+
+
+@frappe.whitelist()
+def send_template_with_params(reference_doctype, reference_name, template, to, body_param=None):
+	"""Send a template with the agent-filled variable values (body_param JSON).
+
+	Creates a WhatsApp Message; our WATIWhatsAppMessage resolver fills {{N}} from
+	body_param (a JSON string like {"1": "...", "2": "..."}).
+	"""
+	from crm.api.whatsapp import validate_access
+
+	validate_access(reference_doctype, reference_name)
+	doc = frappe.new_doc("WhatsApp Message")
+	doc.update(
+		{
+			"reference_doctype": reference_doctype,
+			"reference_name": reference_name,
+			"message_type": "Template",
+			"message": "Template message",
+			"content_type": "text",
+			"use_template": 1,
+			"template": template,
+			"to": to,
+			"body_param": body_param or None,
+		}
+	)
+	doc.insert(ignore_permissions=True)
+	return doc.name
+
+
+# --- Reconcile a lead's WhatsApp thread against WATI (the "Refresh" button) ---
+
+# WATI statusString -> the status vocab the CRM WhatsApp tab renders.
+_WATI_STATUS = {
+	"SENT": "sent",
+	"DELIVERED": "delivered",
+	"READ": "read",
+	"REPLIED": "read",
+	"FAILED": "failed",
+}
+_MEDIA_TYPES = {"text", "image", "video", "audio", "document"}
+_FALSY = (False, "false", "False", 0, "0", None, "")
+
+
+def _row_from_wati_item(it, number, ref_doctype, ref_name):
+	"""Translate one WATI getMessages item into a WhatsApp Message row dict.
+
+	`id` is WATI's stable per-message key (present on every item) — we use it as
+	both the row name and message_id so a refresh is idempotent and can't duplicate.
+	Returns None for non-chat items (ticket/assignment events, empty system rows).
+	"""
+	event_type = it.get("eventType")
+	wid = it.get("id")
+	if event_type == "ticket" or not wid:
+		return None
+
+	status = _WATI_STATUS.get((it.get("statusString") or "").upper(), "")
+	created = it.get("created")
+	base = {
+		"name": wid,
+		"message_id": wid,
+		"creation": created,
+		"conversation_id": it.get("conversationId"),
+		"reference_doctype": ref_doctype,
+		"reference_name": ref_name,
+	}
+
+	if event_type == "broadcastMessage":
+		# Outbound template (variables already resolved by WATI into finalText).
+		base.update(
+			{
+				"type": "Outgoing",
+				"message": it.get("finalText") or "",
+				"content_type": "text",
+				"status": status or "sent",
+				"to": "+" + number,
+			}
+		)
+		return base
+
+	if event_type == "message":
+		body = it.get("text") or ""
+		ctype = it.get("type") if it.get("type") in _MEDIA_TYPES else "text"
+		# Drop pure system/call rows that carry no body and no media.
+		if not body and ctype == "text":
+			return None
+		base.update({"message": body, "content_type": ctype})
+		if it.get("owner") in _FALSY:  # owner falsy = inbound (customer)
+			base.update({"type": "Incoming", "from": "+" + number})
+		else:
+			base.update({"type": "Outgoing", "to": "+" + number, "status": status or "sent"})
+		return base
+
+	return None
+
+
+def _to_system_naive(iso):
+	"""WATI timestamps are UTC ISO ('2026-06-02T18:23:35.908Z'). Convert to a
+	naive datetime in the site's timezone (what Frappe stores). None on failure."""
+	if not iso:
+		return None
+	try:
+		import datetime
+
+		base = str(iso).replace("Z", "").split(".")[0].split("+")[0]
+		dt_utc = datetime.datetime.strptime(base, "%Y-%m-%dT%H:%M:%S")
+		return frappe.utils.convert_utc_to_system_timezone(dt_utc).replace(tzinfo=None)
+	except Exception:
+		return None
+
+
+def _insert_history_row(row):
+	"""Write a reconciled row directly (db_insert) — NEVER through insert(), which
+	would trigger before_insert/send_outgoing and re-send the message via WATI."""
+	doc = frappe.new_doc("WhatsApp Message")
+	created = _to_system_naive(row.pop("creation", None))
+	doc.update(row)
+	doc.name = row["name"]
+	doc.flags.name_set = True
+	if created:
+		doc.creation = created
+		doc.modified = created
+	doc.db_insert()
+
+
+@frappe.whitelist()
+def refresh_messages_from_wati(reference_doctype, reference_name):
+	"""Reconcile a lead's WhatsApp thread against WATI's authoritative history.
+
+	Pulls the full conversation (all pages) and rebuilds ONLY this lead's
+	WhatsApp Message rows from it — keyed on WATI's stable `id`. Scoped strictly
+	to this lead; runs in one transaction (a failed fetch aborts before any
+	delete); uses db_insert so nothing is re-sent.
+	"""
+	from crm.api.whatsapp import validate_access
+
+	from tatva_connect.wati import api as wati
+	from tatva_connect.wati import routing
+
+	validate_access(reference_doctype, reference_name)
+	if reference_doctype != "CRM Lead":
+		frappe.throw("WhatsApp refresh is only supported on CRM Lead.")
+
+	lead = frappe.get_doc(reference_doctype, reference_name)
+	account_name = routing.resolve_account_for_lead(lead)
+	if not account_name:
+		frappe.throw("No WATI account route for this lead — configure routing before refreshing.")
+	number = wati.normalize_number(lead.mobile_no)
+	if not number:
+		frappe.throw("This lead has no mobile number to refresh.")
+
+	account = frappe.get_doc("WhatsApp Account", account_name)
+	wati.assert_wati(account)
+
+	# Fetch first — if WATI errors this raises and we never delete anything.
+	items = wati.get_all_messages(account, number)
+	rows = [
+		r for r in (
+			_row_from_wati_item(it, number, reference_doctype, reference_name) for it in items
+		) if r
+	]
+
+	# Transactional rebuild, scoped to THIS lead only.
+	frappe.db.delete(
+		"WhatsApp Message",
+		{"reference_doctype": reference_doctype, "reference_name": reference_name},
+	)
+	for row in rows:
+		_insert_history_row(row)
+	frappe.db.commit()
+	return {"count": len(rows), "account": account_name}

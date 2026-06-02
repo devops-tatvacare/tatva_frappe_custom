@@ -157,6 +157,28 @@ def get_messages(account, number: str, page_size: int = 50, page_number: int = 1
 	return make_get_request(url, headers=_headers(token))
 
 
+def get_all_messages(account, number: str, page_size: int = 100, max_pages: int = 50):
+	"""Pull a number's FULL message history (all pages) from WATI getMessages.
+
+	Loops pageNumber until a short/empty page (or the safety cap) and returns the
+	flat list of message items. Raises on an API error (so a caller reconciling
+	from this never proceeds on a failed fetch).
+	"""
+	items = []
+	for page in range(1, max_pages + 1):
+		resp = get_messages(account, number, page_size=page_size, page_number=page)
+		page_items = ((resp or {}).get("messages") or {}).get("items") or []
+		items.extend(page_items)
+		if len(page_items) < page_size:
+			break
+	else:
+		frappe.log_error(
+			title="WATI getMessages hit page cap",
+			message=f"account={getattr(account, 'name', '')} number={number} pages={max_pages}",
+		)
+	return items
+
+
 def get_message_templates(account, page_size: int = 500, page_number: int = 1):
 	"""GET /api/v1/getMessageTemplates — the tenant's templates (already approved on WATI)."""
 	token = account.get_password("token")

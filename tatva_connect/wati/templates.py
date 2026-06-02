@@ -44,3 +44,9 @@ class WATITemplates(WhatsAppTemplates):
 	def update_template(self):
 		# Never edit the template on Meta.
 		pass
+
+	def on_trash(self):
+		# No-Meta backstop: upstream on_trash POSTs a DELETE to the provider's
+		# message_templates endpoint. Our rows are a read-only mirror of WATI —
+		# deleting one locally must never call out. No-op.
+		pass

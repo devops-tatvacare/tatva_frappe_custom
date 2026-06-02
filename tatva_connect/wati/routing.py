@@ -11,18 +11,24 @@ wrong tenant. A catch-all is possible only by an explicit rule with all axes
 blank, if the operator chooses to create one.
 """
 import frappe
+from frappe import _
 
 # Specificity weights — higher = more specific.
 _PROGRAM_W, _GROUP_W, _VERTICAL_W = 4, 2, 1
 
 
 def resolve_account_for_lead(lead):
-	"""Return the WhatsApp Account name for a lead, or None if no rule matches."""
+	"""Return the WhatsApp Account name for a lead, or None if no rule matches.
+
+	Most-specific rule wins (Program > Group > Product Line). If two equally
+	specific rules point at DIFFERENT accounts for the same lead, that's an
+	ambiguous config — raise rather than pick one silently.
+	"""
 	program = lead.get("custom_current_program")
 	group = lead.get("custom_psp_group")
 	vertical = lead.get("custom_vertical")
 
-	best, best_score = None, -1
+	best, best_score, tie = None, -1, False
 	for rule in frappe.get_all(
 		"WATI Account Routing",
 		fields=["whatsapp_account", "program", "psp_group", "vertical"],
@@ -40,7 +46,17 @@ def resolve_account_for_lead(lead):
 			+ (_VERTICAL_W if rule.vertical else 0)
 		)
 		if score > best_score:
-			best, best_score = rule.whatsapp_account, score
+			best, best_score, tie = rule.whatsapp_account, score, False
+		elif score == best_score and rule.whatsapp_account != best:
+			tie = True
+	if tie:
+		frappe.throw(
+			_(
+				"Ambiguous WATI routing: two equally-specific rules point at different "
+				"accounts for this lead. Fix the WATI Account Routing rules."
+			),
+			title=_("Ambiguous WATI route"),
+		)
 	return best
 
 
@@ -52,9 +68,25 @@ def resolve_for_message(msg):
 	return resolve_account_for_lead(lead)
 
 
-def account_for_channel(channel_number):
-	"""Inbound: map the WABA number that received the message -> its WhatsApp Account."""
+def account_for_channel(channel_number, account_hint=None):
+	"""Inbound: resolve which WhatsApp Account received the message.
+
+	Precedence:
+	  1. account_hint — the account encoded in the per-tenant webhook URL
+	     (operator-controlled, doesn't depend on any WATI payload field);
+	  2. the WABA channel number the message arrived on;
+	  3. single-tenant safety net — only if EXACTLY ONE WATI account exists.
+
+	With 2+ WATI accounts and no hint/channel match we return None (the caller
+	logs + still stores the message) rather than guess and misattribute it to the
+	wrong tenant.
+	"""
 	from tatva_connect.wati import api as wati
+
+	if account_hint and frappe.db.exists(
+		"WhatsApp Account", {"name": account_hint, "custom_is_wati": 1}
+	):
+		return account_hint
 
 	if channel_number:
 		digits = wati.normalize_number(channel_number)
@@ -63,5 +95,6 @@ def account_for_channel(channel_number):
 		)
 		if account:
 			return account
-	# Fallback while single-tenant: the one WATI account.
-	return frappe.db.get_value("WhatsApp Account", {"custom_is_wati": 1}, "name")
+
+	accounts = frappe.get_all("WhatsApp Account", filters={"custom_is_wati": 1}, pluck="name")
+	return accounts[0] if len(accounts) == 1 else None
