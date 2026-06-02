@@ -37,11 +37,17 @@
       ]
     },
     {
+      "name": "Administration",
+      "tags": [
+        "Users",
+        "Roles and Permissions"
+      ]
+    },
+    {
       "name": "Reference",
       "tags": [
         "Reference Data",
         "Schema",
-        "Roles and Permissions",
         "Tags"
       ]
     }
@@ -49,7 +55,7 @@
   "tags": [
     {
       "name": "Authentication",
-      "description": "## How to authenticate\n\nEvery request needs an `Authorization` header. Format:\n\n```\nAuthorization: token <api_key>:<api_secret>\n```\n\nThe word `token` is **literal lowercase**, followed by a single space, then `api_key`, a colon `:`, then `api_secret`. No `Bearer`, no quotes, no JWT.\n\nA real example:\n\n```\nAuthorization: token 3ae28a4abc8527d:08f94c85b82a1d2\n```\n\n### How to get a key\n\n1. **Email** `pareekshith.bompally@tatvacare.in` with: integration name, who owns it, expected request volume.\n2. **You receive** a dedicated user (e.g. `mytatva-writer@tatvacare.in`) plus its `api_key:api_secret` pair. The user has the **System Manager** role so it can write the permission-locked routing fields (`custom_vertical`, `custom_psp_group`, `custom_current_program`, `custom_origin_vertical`, `custom_previous_program`, `custom_program_lifecycle_stage`). A regular user key would silently drop those fields on write, which is why integration keys are provisioned with this role.\n3. **Store** the pair as one environment variable: `FRAPPE_API_TOKEN=\"3ae28a4abc8527d:08f94c85b82a1d2\"`. Treat it like a database password.\n\n### One key per integration\n\nDon't share keys across systems. Each integration gets its own user + key so we can revoke / rotate / audit per integration. If you need a key for staging plus a separate one for prod, request both.\n\n### Verify your key works\n\nThe fastest handshake \u2014 returns the authenticated user's email if the key is valid:\n\n```bash\ncurl -H 'Authorization: token <api_key>:<api_secret>' \\\n     https://one.tatvacare.in/api/method/frappe.auth.get_logged_user\n```\n\nSuccess returns `{\"message\":\"mytatva-writer@tatvacare.in\"}`. A `401` means the header is malformed (most often: missing the literal word `token`, extra spaces, swapped key/secret order).\n\n### Rotation, revocation, leakage\n\nIf a key is ever leaked, exposed in logs, committed to git \u2014 email CRM Ops immediately. We'll revoke it (the user gets disabled) and reissue a fresh pair. The new pair has different values; update your env var and redeploy.\n\nRoutine rotation isn't enforced today; we'll add a schedule if/when compliance requires it.\n\n### What the key can NOT do\n\n- It can't bypass field-level validation (Link values must exist, required fields can't be empty).\n- It can't call non-whitelisted methods (anything not documented here or under `frappe.client.*`).\n- It can't see leads outside the CRM site (it's scoped to this site only)."
+      "description": "## How to authenticate\n\nEvery request needs an `Authorization` header. Format:\n\n```\nAuthorization: token <api_key>:<api_secret>\n```\n\nThe word `token` is **literal lowercase**, followed by a single space, then `api_key`, a colon `:`, then `api_secret`. No `Bearer`, no quotes, no JWT.\n\nExample (placeholder \u2014 not a real key):\n\n```\nAuthorization: token 000000000000000:000000000000000\n```\n\n### How to get a key\n\n1. **Email** `pareekshith.bompally@tatvacare.in` with: integration name, who owns it, expected request volume.\n2. **You receive** a dedicated user (e.g. `mytatva-writer@tatvacare.in`) plus its `api_key:api_secret` pair. The user has the **System Manager** role so it can write the permission-locked routing fields (`custom_vertical`, `custom_psp_group`, `custom_current_program`, `custom_origin_vertical`, `custom_previous_program`, `custom_program_lifecycle_stage`). A regular user key would silently drop those fields on write, which is why integration keys are provisioned with this role.\n3. **Store** the pair as one environment variable: `FRAPPE_API_TOKEN=\"000000000000000:000000000000000\"`. Treat it like a database password.\n\n### One key per integration\n\nDon't share keys across systems. Each integration gets its own user + key so we can revoke / rotate / audit per integration. If you need a key for staging plus a separate one for prod, request both.\n\n### Verify your key works\n\nThe fastest handshake \u2014 returns the authenticated user's email if the key is valid:\n\n```bash\ncurl -H 'Authorization: token <api_key>:<api_secret>' \\\n     https://one.tatvacare.in/api/method/frappe.auth.get_logged_user\n```\n\nSuccess returns `{\"message\":\"mytatva-writer@tatvacare.in\"}`. A `401` means the header is malformed (most often: missing the literal word `token`, extra spaces, swapped key/secret order).\n\n### Rotation, revocation, leakage\n\nIf a key is ever leaked, exposed in logs, committed to git \u2014 email CRM Ops immediately. We'll revoke it (the user gets disabled) and reissue a fresh pair. The new pair has different values; update your env var and redeploy.\n\nRoutine rotation isn't enforced today; we'll add a schedule if/when compliance requires it.\n\n### What the key can NOT do\n\n- It can't bypass field-level validation (Link values must exist, required fields can't be empty).\n- It can't call non-whitelisted methods (anything not documented here or under `frappe.client.*`).\n- It can't see leads outside the CRM site (it's scoped to this site only)."
     },
     {
       "name": "Leads",
@@ -74,6 +80,10 @@
     {
       "name": "Telephony",
       "description": "## Calls on a lead\n\nCalls are rows in **`CRM Call Log`**, linked to a lead via `reference_doctype` + `reference_docname`. **Reading call logs is live today.** A row carries `type` (Incoming/Outgoing), `status`, `from`/`to`, `duration`, and `recording_url` (private \u2014 patient PII).\n\nOutbound **click-to-call** and automatic inbound logging are provided by **Acefone**; that half is in build, so the click-to-call endpoint is badged planned and `telephony_medium` has no `Acefone` value until it deploys.\n\nSee [Telephony](/docs/telephony) in the Documentation tab."
+    },
+    {
+      "name": "Users",
+      "description": "## Users, onboarding & API keys\n\nEvery account \u2014 an agent or an integration \u2014 is a `User`, and its **roles** decide what it can do ([Roles & permissions](/docs/api/roles-and-permissions)). Two admin jobs live here:\n\n- **Onboard** \u2014 create a user with the right roles (and, for people, a welcome email to set a password).\n- **Mint a key** \u2014 generate an `api_key`/`api_secret` for an integration account, exactly the pair [Authentication](/docs/api/authentication) expects.\n\nThe end-to-end onboarding of an integration: `POST User` (with its role) \u2192 `generate_keys` (capture the secret) \u2192 hand the pair to the integration. See [Users & onboarding](/docs/users) in the Documentation tab.\n\n> **\u26a0 Admin-only.** These need an admin-roled key, and `generate_keys` **rotates** \u2014 it invalidates the user's previous secret."
     },
     {
       "name": "Roles and Permissions",
@@ -1279,6 +1289,58 @@
             ]
           }
         }
+      },
+      "UserAccount": {
+        "type": "object",
+        "description": "A Frappe `User` \u2014 an agent or an integration account. Roles decide capability.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "format": "email",
+            "description": "The user id (= email)."
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ],
+            "description": "0 = disabled (login + keys blocked)."
+          },
+          "user_type": {
+            "type": "string",
+            "enum": [
+              "System User",
+              "Website User"
+            ]
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Child table of assigned roles."
+          },
+          "api_key": {
+            "type": "string",
+            "description": "Set once keys are generated; the secret is never returned on read."
+          }
+        }
       }
     },
     "examples": {
@@ -1581,78 +1643,6 @@
         }
       }
     },
-    "/api/method/upsert_lead_by_phone": {
-      "post": {
-        "tags": [
-          "Leads"
-        ],
-        "summary": "Upsert a lead by phone (recommended)",
-        "description": "**The recommended write endpoint for ~99% of integrations.** Idempotent on `mobile_no`. Safe to retry. Finds an existing lead by `mobile_no` and updates it, or creates a new one. Profile children are passed as embedded arrays \u2014 same shape as standard REST.\n\n### How it merges\n\nFor an existing lead, fields you SEND are updated; fields you OMIT are LEFT ALONE. For profile children, fields you send ARE MERGED into the existing row (not replaced wholesale). This is the safest write pattern \u2014 use it unless you specifically need raw REST semantics.\n\n### Default-fill behaviour\n\n- Missing `first_name` \u2192 set to `(no name)`\n- Missing `status` \u2192 set to `New`\n- Profile arrays accept either actual JSON arrays or stringified JSON (the script parses both).\n\n### Always check `message.ok` (not HTTP status)\n\nHTTP 200 is returned even on failure today (silent-200 quirk pending patch). Inspect the boolean `message.ok` field. A patch will set HTTP 422 on the failure path; the boolean check works in both cases \u2014 safe to write your client code against `message.ok` today.\n\n### Common pitfalls\n\n- Sending an unknown Link value (e.g. mistyped program name) \u2192 `message.ok: false` with `LinkValidationError` in the error string. Fix: read [Lookups](/docs/api/reference-data) first.\n- Setting `status` to `Junk` or `Unqualified` without `lost_reason` \u2192 `ValidationError: Please specify a reason for losing the lead.` Add `lost_reason` from the [Lookups](/docs/api/reference-data) values.\n- Sending a `lead_owner` email that isn't a real Frappe user \u2192 `LinkValidationError`. Leave blank if unsure.\n\n### Related\n\n[Read \u203a Get one lead](/docs/api/leads) to fetch the lead back after writing. [Lookups](/docs/api/reference-data) to enumerate valid Link values before writing.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpsertLeadRequest"
-              },
-              "examples": {
-                "1. Minimum viable": {
-                  "$ref": "#/components/examples/MinimalUpsert"
-                },
-                "2. With routing": {
-                  "$ref": "#/components/examples/UpsertWithRouting"
-                },
-                "3. With one profile": {
-                  "$ref": "#/components/examples/UpsertWithOneProfile"
-                },
-                "4. Full \u2014 insurer + labs": {
-                  "$ref": "#/components/examples/InsurerLabIntakeLead"
-                },
-                "5. Full \u2014 oncology PSP": {
-                  "$ref": "#/components/examples/OncologyPSPLead"
-                },
-                "6. Full \u2014 wellness subscription": {
-                  "$ref": "#/components/examples/WellnessSubscriptionLead"
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Always 200 today (silent-200 quirk). Inspect `message.ok`.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UpsertLeadResponse"
-                },
-                "examples": {
-                  "Created": {
-                    "$ref": "#/components/examples/UpsertSuccessCreated"
-                  },
-                  "Updated": {
-                    "$ref": "#/components/examples/UpsertSuccessUpdated"
-                  },
-                  "Failure": {
-                    "$ref": "#/components/examples/UpsertFailure"
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Bad/missing API key.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/resource/CRM Lead": {
       "get": {
         "tags": [
@@ -1774,18 +1764,6 @@
       }
     },
     "/api/resource/CRM Lead/{name}": {
-      "parameters": [
-        {
-          "name": "name",
-          "in": "path",
-          "required": true,
-          "schema": {
-            "type": "string"
-          },
-          "example": "CRM-LEAD-2026-00123",
-          "description": "CRM Lead primary key. Obtained from a prior write response (`message.name` from upsert) or a list query."
-        }
-      ],
       "get": {
         "tags": [
           "Leads"
@@ -1848,40 +1826,1119 @@
             "description": "Deleted."
           }
         }
-      }
-    },
-    "/api/resource/DocType/{doctype_name}": {
+      },
       "parameters": [
         {
-          "name": "doctype_name",
+          "name": "name",
           "in": "path",
           "required": true,
           "schema": {
             "type": "string"
           },
-          "example": "CRM Lead",
-          "description": "Doctype name. URL-encode spaces: `CRM Lead` \u2192 `CRM%20Lead`."
+          "example": "CRM-LEAD-2026-00123",
+          "description": "CRM Lead primary key. Obtained from a prior write response (`message.name` from upsert) or a list query."
         }
-      ],
+      ]
+    },
+    "/api/method/frappe.client.get_count": {
       "get": {
         "tags": [
-          "Schema"
+          "Leads"
         ],
-        "summary": "Introspect a doctype's full schema",
-        "description": "Returns the live doctype definition: every field with `fieldname`, `fieldtype`, `label`, `reqd`, `options` (Link target or Select options), `permlevel`, etc. See [Discovery](/docs/api/schema) for how to use this in your integration code.\n\nWorks for ANY doctype \u2014 Lead, profiles, lookups, even Frappe core doctypes like `User` or `File`.",
+        "summary": "Count records (with filters)",
+        "description": "Returns the number of records matching the filters. Useful for pre-write checks (e.g. duplicate phone count before insert) and dashboard counts.",
+        "parameters": [
+          {
+            "name": "doctype",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "CRM Lead"
+          },
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[[\"mobile_no\",\"=\",\"+919999000123\"]]"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Full doctype definition.",
+            "description": "Count.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FrappeDocResponse"
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/method/upsert_lead_by_phone": {
+      "post": {
+        "tags": [
+          "Leads"
+        ],
+        "summary": "Upsert a lead by phone (recommended)",
+        "description": "**The recommended write endpoint for ~99% of integrations.** Idempotent on `mobile_no`. Safe to retry. Finds an existing lead by `mobile_no` and updates it, or creates a new one. Profile children are passed as embedded arrays \u2014 same shape as standard REST.\n\n### How it merges\n\nFor an existing lead, fields you SEND are updated; fields you OMIT are LEFT ALONE. For profile children, fields you send ARE MERGED into the existing row (not replaced wholesale). This is the safest write pattern \u2014 use it unless you specifically need raw REST semantics.\n\n### Default-fill behaviour\n\n- Missing `first_name` \u2192 set to `(no name)`\n- Missing `status` \u2192 set to `New`\n- Profile arrays accept either actual JSON arrays or stringified JSON (the script parses both).\n\n### Always check `message.ok` (not HTTP status)\n\nHTTP 200 is returned even on failure today (silent-200 quirk pending patch). Inspect the boolean `message.ok` field. A patch will set HTTP 422 on the failure path; the boolean check works in both cases \u2014 safe to write your client code against `message.ok` today.\n\n### Common pitfalls\n\n- Sending an unknown Link value (e.g. mistyped program name) \u2192 `message.ok: false` with `LinkValidationError` in the error string. Fix: read [Lookups](/docs/api/reference-data) first.\n- Setting `status` to `Junk` or `Unqualified` without `lost_reason` \u2192 `ValidationError: Please specify a reason for losing the lead.` Add `lost_reason` from the [Lookups](/docs/api/reference-data) values.\n- Sending a `lead_owner` email that isn't a real Frappe user \u2192 `LinkValidationError`. Leave blank if unsure.\n\n### Related\n\n[Read \u203a Get one lead](/docs/api/leads) to fetch the lead back after writing. [Lookups](/docs/api/reference-data) to enumerate valid Link values before writing.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertLeadRequest"
+              },
+              "examples": {
+                "1. Minimum viable": {
+                  "$ref": "#/components/examples/MinimalUpsert"
+                },
+                "2. With routing": {
+                  "$ref": "#/components/examples/UpsertWithRouting"
+                },
+                "3. With one profile": {
+                  "$ref": "#/components/examples/UpsertWithOneProfile"
+                },
+                "4. Full \u2014 insurer + labs": {
+                  "$ref": "#/components/examples/InsurerLabIntakeLead"
+                },
+                "5. Full \u2014 oncology PSP": {
+                  "$ref": "#/components/examples/OncologyPSPLead"
+                },
+                "6. Full \u2014 wellness subscription": {
+                  "$ref": "#/components/examples/WellnessSubscriptionLead"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Always 200 today (silent-200 quirk). Inspect `message.ok`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsertLeadResponse"
+                },
+                "examples": {
+                  "Created": {
+                    "$ref": "#/components/examples/UpsertSuccessCreated"
+                  },
+                  "Updated": {
+                    "$ref": "#/components/examples/UpsertSuccessUpdated"
+                  },
+                  "Failure": {
+                    "$ref": "#/components/examples/UpsertFailure"
+                  }
                 }
               }
             }
           },
+          "401": {
+            "description": "Bad/missing API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/File": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "List files attached to a lead",
+        "description": "Standard Frappe list endpoint for the `File` doctype. To get files for a specific lead, filter on `attached_to_doctype` + `attached_to_name`.\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n     --data-urlencode 'filters=[[\"attached_to_doctype\",\"=\",\"CRM Lead\"],[\"attached_to_name\",\"=\",\"CRM-LEAD-2026-00123\"]]' \\\n     --data-urlencode 'fields=[\"name\",\"file_name\",\"file_url\",\"file_size\",\"is_private\",\"creation\"]' \\\n     https://one.tatvacare.in/api/resource/File\n```",
+        "parameters": [
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[[\"attached_to_doctype\",\"=\",\"CRM Lead\"],[\"attached_to_name\",\"=\",\"CRM-LEAD-2026-00123\"]]"
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[\"name\",\"file_name\",\"file_url\",\"is_private\"]"
+          },
+          {
+            "name": "limit_page_length",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of File rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FileDoc"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/method/upload_file": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Upload a file and attach to a lead",
+        "description": "Frappe core file-upload endpoint. Multipart/form-data. **Always set `is_private=1` for patient documents** \u2014 the file URL will be `/private/files/...` requiring auth to fetch.\n\n### Required form parts\n\n- `file` \u2014 the binary file content\n- `doctype` \u2014 `CRM Lead`\n- `docname` \u2014 the lead's primary key (e.g. `CRM-LEAD-2026-00123`)\n- `is_private` \u2014 `1` (use `1` for patient docs, `0` only for non-sensitive content)\n\n### Optional form parts\n\n- `fieldname` \u2014 if you want the file to populate a specific Attach field on the lead\n- `folder` \u2014 defaults to `Home`\n- `file_name` \u2014 override the display name\n- `optimize` \u2014 optimize images on upload (jpg/png/gif)\n\n### Curl example\n\n```bash\ncurl -X POST -H 'Authorization: token KEY:SECRET' \\\n     -F 'file=@./lab-report-may.pdf' \\\n     -F 'doctype=CRM Lead' \\\n     -F 'docname=CRM-LEAD-2026-00123' \\\n     -F 'is_private=1' \\\n     https://one.tatvacare.in/api/method/upload_file\n```\n\n### Download the file later\n\nThe response includes `file_url`. To download:\n- Public files (`/files/...`) \u2014 open `GET <base_url><file_url>` with no auth.\n- Private files (`/private/files/...`) \u2014 `GET <base_url><file_url>` with the same `Authorization: token KEY:SECRET` header. A 403 from a private URL means your auth is missing or the lead permission check failed.\n\n### Dedup re-uploads\n\nEach upload creates a new `File` row, even if you upload the same bytes twice. To dedup client-side, hash the file and check existing files via `GET /api/resource/File?filters=[[\"content_hash\",\"=\",\"<md5>\"],[\"attached_to_name\",\"=\",\"<lead>\"]]`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "doctype": {
+                    "type": "string",
+                    "example": "CRM Lead"
+                  },
+                  "docname": {
+                    "type": "string",
+                    "example": "CRM-LEAD-2026-00123"
+                  },
+                  "is_private": {
+                    "type": "integer",
+                    "enum": [
+                      0,
+                      1
+                    ],
+                    "default": 1
+                  },
+                  "fieldname": {
+                    "type": "string"
+                  },
+                  "folder": {
+                    "type": "string",
+                    "default": "Home"
+                  },
+                  "file_name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file",
+                  "doctype",
+                  "docname"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "File uploaded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "$ref": "#/components/schemas/FileDoc"
+                    }
+                  }
+                },
+                "examples": {
+                  "Private upload": {
+                    "$ref": "#/components/examples/FileUploadResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/File/{name}": {
+      "delete": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Delete a file",
+        "description": "Removes the File row AND the physical file from disk. Idempotent \u2014 a second DELETE returns 404, which is fine.",
+        "responses": {
+          "200": {
+            "description": "Deleted."
+          },
           "404": {
-            "description": "Doctype not found."
+            "description": "Already deleted (safe)."
+          }
+        }
+      },
+      "parameters": [
+        {
+          "name": "name",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "File row's primary key (hash-based, e.g. `c14b27639e`)."
+        }
+      ]
+    },
+    "/api/resource/WhatsApp Message": {
+      "get": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "List a lead's WhatsApp messages (planned)",
+        "description": "> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nRead a lead's WhatsApp thread. Filter by `reference_doctype` = `CRM Lead` and `reference_name` = the lead's name (note: WhatsApp uses `reference_name`, calls use `reference_docname`).\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'filters=[[\"reference_doctype\",\"=\",\"CRM Lead\"],[\"reference_name\",\"=\",\"CRM-LEAD-2026-00123\"]]' \\\n  --data-urlencode 'order_by=creation asc' \\\n  https://one.tatvacare.in/api/resource/WhatsApp%20Message\n```",
+        "parameters": [
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[[\"reference_doctype\",\"=\",\"CRM Lead\"],[\"reference_name\",\"=\",\"CRM-LEAD-2026-00123\"]]"
+          },
+          {
+            "name": "order_by",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "creation asc"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WhatsAppMessage"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/WhatsApp Message/{name}": {
+      "get": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Read one WhatsApp message (planned)",
+        "description": "> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nFetch a single message by its Frappe `name`.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/WhatsAppMessage"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/method/send_whatsapp_to_lead": {
+      "post": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Send a WhatsApp message to a lead (planned)",
+        "description": "> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nSend a session message or an approved template to a lead. Under the hood this inserts a `WhatsApp Message` row, which triggers the WATI send and threads delivery status back onto the same row. The exact method signature is finalised with the WATI rollout; the body below is the intended shape.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "lead"
+                ],
+                "properties": {
+                  "lead": {
+                    "type": "string",
+                    "example": "CRM-LEAD-2026-00123"
+                  },
+                  "template_name": {
+                    "type": "string",
+                    "example": "document_approved",
+                    "description": "For a template send."
+                  },
+                  "message": {
+                    "type": "string",
+                    "description": "For a free-text session message (24h window)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Queued for send.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "$ref": "#/components/schemas/WhatsAppMessage"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/CRM Call Log": {
+      "get": {
+        "tags": [
+          "Telephony"
+        ],
+        "summary": "List a lead's call logs",
+        "description": "Read the calls linked to a lead. Filter by `reference_doctype` = `CRM Lead` and `reference_docname` = the lead's name.\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'filters=[[\"reference_doctype\",\"=\",\"CRM Lead\"],[\"reference_docname\",\"=\",\"CRM-LEAD-2026-00123\"]]' \\\n  --data-urlencode 'fields=[\"name\",\"type\",\"status\",\"from\",\"to\",\"duration\",\"start_time\"]' \\\n  https://one.tatvacare.in/api/resource/CRM%20Call%20Log\n```",
+        "parameters": [
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[[\"reference_doctype\",\"=\",\"CRM Lead\"],[\"reference_docname\",\"=\",\"CRM-LEAD-2026-00123\"]]"
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[\"name\",\"type\",\"status\",\"from\",\"to\",\"duration\"]"
+          },
+          {
+            "name": "limit_page_length",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CallLog"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/CRM Call Log/{name}": {
+      "get": {
+        "tags": [
+          "Telephony"
+        ],
+        "summary": "Read one call log",
+        "description": "Fetch a single call by its Frappe `name`, including `recording_url` and timestamps.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "abc123def4"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CallLog"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/method/tatva_crm.acefone.handler.make_acefone_call": {
+      "post": {
+        "tags": [
+          "Telephony"
+        ],
+        "summary": "Click-to-call a lead (planned)",
+        "description": "> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nRings the agent first, then bridges to the lead's `mobile_no` (a phone bridge, not a browser softphone). Creates a `CRM Call Log` row in `Initiated` and walks it to a terminal status via the Acefone webhook.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "lead"
+                ],
+                "properties": {
+                  "lead": {
+                    "type": "string",
+                    "example": "CRM-LEAD-2026-00123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Call initiated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        },
+                        "call_log": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/User": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "List users",
+        "description": "List agents and integration accounts. Filter to active users; this is also how you resolve a valid `lead_owner` before assigning a lead.\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'filters=[[\"enabled\",\"=\",1]]' \\\n  --data-urlencode 'fields=[\"name\",\"full_name\",\"enabled\"]' \\\n  https://one.tatvacare.in/api/resource/User\n```",
+        "parameters": [
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[[\"enabled\",\"=\",1]]"
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[\"name\",\"full_name\",\"enabled\"]"
+          },
+          {
+            "name": "limit_page_length",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 100
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserAccount"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Create a user (onboard an agent or integration account)",
+        "description": "Create a `User`, assigning roles inline (roles are a child table, so set them here rather than via a separate call). Set `send_welcome_email: 1` to trigger Frappe's password-set email.\n\nFor an **integration** account, create it with the role(s) it needs, then mint its keys with `generate_keys` below.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "first_name"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "new-agent@tatvacare.in"
+                  },
+                  "first_name": {
+                    "type": "string",
+                    "example": "New"
+                  },
+                  "send_welcome_email": {
+                    "type": "integer",
+                    "enum": [
+                      0,
+                      1
+                    ],
+                    "example": 1
+                  },
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "example": [
+                      {
+                        "role": "Sales User"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/UserAccount"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/User/{email}": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Read a user (with roles)",
+        "description": "Fetch a user by email. The returned doc embeds the `roles` child table \u2014 the list of roles that decides the account's capabilities (see [Roles & permissions](/docs/api/roles-and-permissions)).\n\nNote: the built-in `Administrator` account is specially protected and returns `403`; ordinary users read fine.",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "email"
+            },
+            "example": "mytatva-writer@tatvacare.in"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/UserAccount"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Update a user (enable / disable, roles)",
+        "description": "Partial update. Common admin uses: disable an account (`{\"enabled\": 0}`) or change its roles. Roles are a child table \u2014 send the **full** desired `roles` array (it replaces the existing set).",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "email"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "integer",
+                    "enum": [
+                      0,
+                      1
+                    ]
+                  },
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "example": [
+                      {
+                        "role": "Sales User"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/UserAccount"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/method/frappe.core.doctype.user.user.generate_keys": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Generate API keys for a user",
+        "description": "Mint an `api_key` + `api_secret` for a user \u2014 this is how an integration account gets the credentials described in [Authentication](/docs/api/authentication).\n\n> **\u26a0 This rotates the secret.** Calling it **invalidates the user's previous `api_secret`** immediately. The new secret is returned **once, in this response, and never again** \u2014 capture it now or you'll have to regenerate (breaking the old one). The `api_key` is set on the user doc; the secret is only ever shown here.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user"
+                ],
+                "properties": {
+                  "user": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "mytatva-writer@tatvacare.in"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Keys generated. Capture `api_secret` now.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "object",
+                      "properties": {
+                        "api_secret": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/Role": {
+      "get": {
+        "tags": [
+          "Roles and Permissions"
+        ],
+        "summary": "List roles",
+        "description": "Every role defined on the site. The `name` of a role is what you'd assign to a user.",
+        "parameters": [
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[[\"disabled\",\"=\",0]]"
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[\"name\",\"desk_access\",\"is_custom\"]"
+          },
+          {
+            "name": "limit_page_length",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 200
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Role"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/Role Profile": {
+      "get": {
+        "tags": [
+          "Roles and Permissions"
+        ],
+        "summary": "List role profiles",
+        "description": "Role Profiles bundle several roles under one name, so you can grant a consistent set in one assignment instead of listing roles individually.",
+        "parameters": [
+          {
+            "name": "limit_page_length",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 100
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/LookupItem"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/method/frappe.client.has_permission": {
+      "get": {
+        "tags": [
+          "Roles and Permissions"
+        ],
+        "summary": "Check a permission",
+        "description": "Ask whether the **current key's user** has a given permission on a doctype (optionally a specific record). Returns `{\"message\": {\"has_permission\": 1}}` or `0`. Use it to fail fast in your integration before attempting a write.",
+        "parameters": [
+          {
+            "name": "doctype",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "CRM Lead"
+          },
+          {
+            "name": "docname",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional \u2014 check on a specific record."
+          },
+          {
+            "name": "perm_type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "write",
+            "description": "read / write / create / delete \u2026 (default read)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Permission verdict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "object",
+                      "properties": {
+                        "has_permission": {
+                          "type": "integer",
+                          "enum": [
+                            0,
+                            1
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/User Permission": {
+      "get": {
+        "tags": [
+          "Roles and Permissions"
+        ],
+        "summary": "List record-level scoping (User Permissions)",
+        "description": "The row-level restrictions in force. Filter by `user` to see exactly which records a key's user is scoped to. No rows for a user = unrestricted (a manager who sees everything).\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'filters=[[\"user\",\"=\",\"agent-anaya@tatvacare.in\"]]' \\\n  https://one.tatvacare.in/api/resource/User%20Permission\n```",
+        "parameters": [
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[[\"user\",\"=\",\"agent-anaya@tatvacare.in\"]]"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserPermission"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Roles and Permissions"
+        ],
+        "summary": "Create a record-level restriction (scope a user)",
+        "description": "Restrict a user to specific records. Example: scope an agent to only the `Anaya` group \u2014 `{\"user\":\"agent@\u2026\",\"allow\":\"CRM Group\",\"for_value\":\"Anaya\"}`. After this, that user's lead lists silently exclude everything else. Managers (no User Permission rows) keep seeing all.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user",
+                  "allow",
+                  "for_value"
+                ],
+                "properties": {
+                  "user": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "agent-anaya@tatvacare.in"
+                  },
+                  "allow": {
+                    "type": "string",
+                    "example": "CRM Group",
+                    "description": "The doctype to restrict on."
+                  },
+                  "for_value": {
+                    "type": "string",
+                    "example": "Anaya",
+                    "description": "The single value the user is scoped to."
+                  },
+                  "applicable_for": {
+                    "type": "string",
+                    "description": "Optional \u2014 restrict only when accessing this doctype."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/UserPermission"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -2126,715 +3183,41 @@
         }
       }
     },
-    "/api/method/upload_file": {
-      "post": {
-        "tags": [
-          "Files"
-        ],
-        "summary": "Upload a file and attach to a lead",
-        "description": "Frappe core file-upload endpoint. Multipart/form-data. **Always set `is_private=1` for patient documents** \u2014 the file URL will be `/private/files/...` requiring auth to fetch.\n\n### Required form parts\n\n- `file` \u2014 the binary file content\n- `doctype` \u2014 `CRM Lead`\n- `docname` \u2014 the lead's primary key (e.g. `CRM-LEAD-2026-00123`)\n- `is_private` \u2014 `1` (use `1` for patient docs, `0` only for non-sensitive content)\n\n### Optional form parts\n\n- `fieldname` \u2014 if you want the file to populate a specific Attach field on the lead\n- `folder` \u2014 defaults to `Home`\n- `file_name` \u2014 override the display name\n- `optimize` \u2014 optimize images on upload (jpg/png/gif)\n\n### Curl example\n\n```bash\ncurl -X POST -H 'Authorization: token KEY:SECRET' \\\n     -F 'file=@./lab-report-may.pdf' \\\n     -F 'doctype=CRM Lead' \\\n     -F 'docname=CRM-LEAD-2026-00123' \\\n     -F 'is_private=1' \\\n     https://one.tatvacare.in/api/method/upload_file\n```\n\n### Download the file later\n\nThe response includes `file_url`. To download:\n- Public files (`/files/...`) \u2014 open `GET <base_url><file_url>` with no auth.\n- Private files (`/private/files/...`) \u2014 `GET <base_url><file_url>` with the same `Authorization: token KEY:SECRET` header. A 403 from a private URL means your auth is missing or the lead permission check failed.\n\n### Dedup re-uploads\n\nEach upload creates a new `File` row, even if you upload the same bytes twice. To dedup client-side, hash the file and check existing files via `GET /api/resource/File?filters=[[\"content_hash\",\"=\",\"<md5>\"],[\"attached_to_name\",\"=\",\"<lead>\"]]`.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary"
-                  },
-                  "doctype": {
-                    "type": "string",
-                    "example": "CRM Lead"
-                  },
-                  "docname": {
-                    "type": "string",
-                    "example": "CRM-LEAD-2026-00123"
-                  },
-                  "is_private": {
-                    "type": "integer",
-                    "enum": [
-                      0,
-                      1
-                    ],
-                    "default": 1
-                  },
-                  "fieldname": {
-                    "type": "string"
-                  },
-                  "folder": {
-                    "type": "string",
-                    "default": "Home"
-                  },
-                  "file_name": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "file",
-                  "doctype",
-                  "docname"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "File uploaded.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "$ref": "#/components/schemas/FileDoc"
-                    }
-                  }
-                },
-                "examples": {
-                  "Private upload": {
-                    "$ref": "#/components/examples/FileUploadResponse"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/resource/File": {
+    "/api/resource/DocType/{doctype_name}": {
       "get": {
         "tags": [
-          "Files"
+          "Schema"
         ],
-        "summary": "List files attached to a lead",
-        "description": "Standard Frappe list endpoint for the `File` doctype. To get files for a specific lead, filter on `attached_to_doctype` + `attached_to_name`.\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n     --data-urlencode 'filters=[[\"attached_to_doctype\",\"=\",\"CRM Lead\"],[\"attached_to_name\",\"=\",\"CRM-LEAD-2026-00123\"]]' \\\n     --data-urlencode 'fields=[\"name\",\"file_name\",\"file_url\",\"file_size\",\"is_private\",\"creation\"]' \\\n     https://one.tatvacare.in/api/resource/File\n```",
-        "parameters": [
-          {
-            "name": "filters",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "example": "[[\"attached_to_doctype\",\"=\",\"CRM Lead\"],[\"attached_to_name\",\"=\",\"CRM-LEAD-2026-00123\"]]"
-          },
-          {
-            "name": "fields",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "example": "[\"name\",\"file_name\",\"file_url\",\"is_private\"]"
-          },
-          {
-            "name": "limit_page_length",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "default": 20
-            }
-          }
-        ],
+        "summary": "Introspect a doctype's full schema",
+        "description": "Returns the live doctype definition: every field with `fieldname`, `fieldtype`, `label`, `reqd`, `options` (Link target or Select options), `permlevel`, etc. See [Discovery](/docs/api/schema) for how to use this in your integration code.\n\nWorks for ANY doctype \u2014 Lead, profiles, lookups, even Frappe core doctypes like `User` or `File`.",
         "responses": {
           "200": {
-            "description": "List of File rows.",
+            "description": "Full doctype definition.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/FileDoc"
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/FrappeDocResponse"
                 }
               }
             }
+          },
+          "404": {
+            "description": "Doctype not found."
           }
         }
-      }
-    },
-    "/api/resource/File/{name}": {
+      },
       "parameters": [
         {
-          "name": "name",
+          "name": "doctype_name",
           "in": "path",
           "required": true,
           "schema": {
             "type": "string"
           },
-          "description": "File row's primary key (hash-based, e.g. `c14b27639e`)."
+          "example": "CRM Lead",
+          "description": "Doctype name. URL-encode spaces: `CRM Lead` \u2192 `CRM%20Lead`."
         }
-      ],
-      "delete": {
-        "tags": [
-          "Files"
-        ],
-        "summary": "Delete a file",
-        "description": "Removes the File row AND the physical file from disk. Idempotent \u2014 a second DELETE returns 404, which is fine.",
-        "responses": {
-          "200": {
-            "description": "Deleted."
-          },
-          "404": {
-            "description": "Already deleted (safe)."
-          }
-        }
-      }
-    },
-    "/api/method/frappe.client.get_count": {
-      "get": {
-        "tags": [
-          "Leads"
-        ],
-        "summary": "Count records (with filters)",
-        "description": "Returns the number of records matching the filters. Useful for pre-write checks (e.g. duplicate phone count before insert) and dashboard counts.",
-        "parameters": [
-          {
-            "name": "doctype",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "CRM Lead"
-          },
-          {
-            "name": "filters",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "example": "[[\"mobile_no\",\"=\",\"+919999000123\"]]"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Count.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "integer"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/resource/CRM Call Log": {
-      "get": {
-        "tags": [
-          "Telephony"
-        ],
-        "summary": "List a lead's call logs",
-        "description": "Read the calls linked to a lead. Filter by `reference_doctype` = `CRM Lead` and `reference_docname` = the lead's name.\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'filters=[[\"reference_doctype\",\"=\",\"CRM Lead\"],[\"reference_docname\",\"=\",\"CRM-LEAD-2026-00123\"]]' \\\n  --data-urlencode 'fields=[\"name\",\"type\",\"status\",\"from\",\"to\",\"duration\",\"start_time\"]' \\\n  https://one.tatvacare.in/api/resource/CRM%20Call%20Log\n```",
-        "parameters": [
-          {
-            "name": "filters",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "example": "[[\"reference_doctype\",\"=\",\"CRM Lead\"],[\"reference_docname\",\"=\",\"CRM-LEAD-2026-00123\"]]"
-          },
-          {
-            "name": "fields",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "example": "[\"name\",\"type\",\"status\",\"from\",\"to\",\"duration\"]"
-          },
-          {
-            "name": "limit_page_length",
-            "in": "query",
-            "schema": {
-              "type": "integer"
-            },
-            "example": 50
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/CallLog"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/resource/CRM Call Log/{name}": {
-      "get": {
-        "tags": [
-          "Telephony"
-        ],
-        "summary": "Read one call log",
-        "description": "Fetch a single call by its Frappe `name`, including `recording_url` and timestamps.",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "abc123def4"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/CallLog"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/method/tatva_crm.acefone.handler.make_acefone_call": {
-      "post": {
-        "tags": [
-          "Telephony"
-        ],
-        "summary": "Click-to-call a lead (planned)",
-        "description": "> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nRings the agent first, then bridges to the lead's `mobile_no` (a phone bridge, not a browser softphone). Creates a `CRM Call Log` row in `Initiated` and walks it to a terminal status via the Acefone webhook.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "lead"
-                ],
-                "properties": {
-                  "lead": {
-                    "type": "string",
-                    "example": "CRM-LEAD-2026-00123"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Call initiated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "object",
-                      "properties": {
-                        "success": {
-                          "type": "boolean"
-                        },
-                        "call_log": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/resource/WhatsApp Message": {
-      "get": {
-        "tags": [
-          "WhatsApp"
-        ],
-        "summary": "List a lead's WhatsApp messages (planned)",
-        "description": "> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nRead a lead's WhatsApp thread. Filter by `reference_doctype` = `CRM Lead` and `reference_name` = the lead's name (note: WhatsApp uses `reference_name`, calls use `reference_docname`).\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'filters=[[\"reference_doctype\",\"=\",\"CRM Lead\"],[\"reference_name\",\"=\",\"CRM-LEAD-2026-00123\"]]' \\\n  --data-urlencode 'order_by=creation asc' \\\n  https://one.tatvacare.in/api/resource/WhatsApp%20Message\n```",
-        "parameters": [
-          {
-            "name": "filters",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "example": "[[\"reference_doctype\",\"=\",\"CRM Lead\"],[\"reference_name\",\"=\",\"CRM-LEAD-2026-00123\"]]"
-          },
-          {
-            "name": "order_by",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "example": "creation asc"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/WhatsAppMessage"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/resource/WhatsApp Message/{name}": {
-      "get": {
-        "tags": [
-          "WhatsApp"
-        ],
-        "summary": "Read one WhatsApp message (planned)",
-        "description": "> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nFetch a single message by its Frappe `name`.",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/WhatsAppMessage"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/method/send_whatsapp_to_lead": {
-      "post": {
-        "tags": [
-          "WhatsApp"
-        ],
-        "summary": "Send a WhatsApp message to a lead (planned)",
-        "description": "> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nSend a session message or an approved template to a lead. Under the hood this inserts a `WhatsApp Message` row, which triggers the WATI send and threads delivery status back onto the same row. The exact method signature is finalised with the WATI rollout; the body below is the intended shape.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "lead"
-                ],
-                "properties": {
-                  "lead": {
-                    "type": "string",
-                    "example": "CRM-LEAD-2026-00123"
-                  },
-                  "template_name": {
-                    "type": "string",
-                    "example": "document_approved",
-                    "description": "For a template send."
-                  },
-                  "message": {
-                    "type": "string",
-                    "description": "For a free-text session message (24h window)."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Queued for send.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "$ref": "#/components/schemas/WhatsAppMessage"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/resource/Role": {
-      "get": {
-        "tags": [
-          "Roles and Permissions"
-        ],
-        "summary": "List roles",
-        "description": "Every role defined on the site. The `name` of a role is what you'd assign to a user.",
-        "parameters": [
-          {
-            "name": "filters",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "example": "[[\"disabled\",\"=\",0]]"
-          },
-          {
-            "name": "fields",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "example": "[\"name\",\"desk_access\",\"is_custom\"]"
-          },
-          {
-            "name": "limit_page_length",
-            "in": "query",
-            "schema": {
-              "type": "integer"
-            },
-            "example": 200
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Role"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/resource/User/{email}": {
-      "get": {
-        "tags": [
-          "Roles and Permissions"
-        ],
-        "summary": "Read a user's roles",
-        "description": "Fetch a user document by email. The returned doc includes a `roles` child table \u2014 the list of roles that user holds, which is what decides their capabilities.\n\n```bash\ncurl -H 'Authorization: token KEY:SECRET' \\\n  'https://one.tatvacare.in/api/resource/User/mytatva-writer@tatvacare.in'\n```",
-        "parameters": [
-          {
-            "name": "email",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "email"
-            },
-            "example": "mytatva-writer@tatvacare.in"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "User doc with embedded `roles[]`.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string",
-                          "format": "email"
-                        },
-                        "enabled": {
-                          "type": "integer",
-                          "enum": [
-                            0,
-                            1
-                          ]
-                        },
-                        "full_name": {
-                          "type": "string"
-                        },
-                        "roles": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "role": {
-                                "type": "string"
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/resource/User Permission": {
-      "get": {
-        "tags": [
-          "Roles and Permissions"
-        ],
-        "summary": "List record-level scoping (User Permissions)",
-        "description": "The row-level restrictions in force. Filter by `user` to see exactly which records a key's user is scoped to. No rows for a user = unrestricted (a manager who sees everything).\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'filters=[[\"user\",\"=\",\"agent-anaya@tatvacare.in\"]]' \\\n  https://one.tatvacare.in/api/resource/User%20Permission\n```",
-        "parameters": [
-          {
-            "name": "filters",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "example": "[[\"user\",\"=\",\"agent-anaya@tatvacare.in\"]]"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/UserPermission"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/method/frappe.client.has_permission": {
-      "get": {
-        "tags": [
-          "Roles and Permissions"
-        ],
-        "summary": "Check a permission",
-        "description": "Ask whether the **current key's user** has a given permission on a doctype (optionally a specific record). Returns `{\"message\": {\"has_permission\": 1}}` or `0`. Use it to fail fast in your integration before attempting a write.",
-        "parameters": [
-          {
-            "name": "doctype",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "CRM Lead"
-          },
-          {
-            "name": "docname",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "description": "Optional \u2014 check on a specific record."
-          },
-          {
-            "name": "perm_type",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "example": "write",
-            "description": "read / write / create / delete \u2026 (default read)."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Permission verdict.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "object",
-                      "properties": {
-                        "has_permission": {
-                          "type": "integer",
-                          "enum": [
-                            0,
-                            1
-                          ]
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+      ]
     },
     "/api/resource/Tag": {
       "get": {

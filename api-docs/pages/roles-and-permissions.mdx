@@ -24,8 +24,10 @@ Three layers stack, from coarse to fine:
 You can read the whole picture instead of guessing:
 
 - **Who am I?** [`get_logged_user`](/docs/api/authentication#verify-api-key-handshake) returns the user your key acts as.
-- **What roles does that user hold?** Read the User doc — its `roles` child table lists them.
-- **What rows are they scoped to?** List `User Permission` filtered by `user`.
-- **Can they do one specific thing?** Ask `has_permission` directly, before you attempt the write.
+- **What roles does that user hold?** [Read the User doc](/docs/api/users#read-a-user-with-roles) — its `roles` child table lists them.
+- **What rows are they scoped to?** [List `User Permission`](/docs/api/roles-and-permissions#list-record-level-scoping-user-permissions) filtered by `user`.
+- **Can they do one specific thing?** Ask [`has_permission`](/docs/api/roles-and-permissions#check-a-permission) directly, before you attempt the write.
+
+To create accounts and mint their keys, see [Users & onboarding](/docs/users).
 
 → **API Reference:** [Roles & permissions endpoints](/docs/api/roles-and-permissions).
