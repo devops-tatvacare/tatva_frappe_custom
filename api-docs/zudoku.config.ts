@@ -3,9 +3,17 @@ import type { ZudokuConfig } from "zudoku";
 const config: ZudokuConfig = {
   site: {
     title: "TatvaCare CRM API",
+    logo: {
+      src: { light: "/tatva-wordmark-light.svg", dark: "/tatva-wordmark-dark.svg" },
+      alt: "TatvaCare CRM API",
+      width: "180px",
+    },
     showPoweredBy: false,
   },
   basePath: "/docs",
+  metadata: {
+    favicon: "/tatva_logo.jpeg",
+  },
   navigation: [
     {
       type: "category",
