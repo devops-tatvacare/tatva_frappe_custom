@@ -20,6 +20,11 @@ echo "[1/4] build"
 [ -d node_modules ] || npm install
 npm run build
 
+# Strip Zudoku's CDN preconnect hint from the built HTML (no asset loads from it;
+# this just removes the last 'zudoku' reference from the served markup). Durable —
+# runs on every build so it can't regress.
+find dist/docs -name '*.html' -print0 | xargs -0 perl -i -pe 's{<link[^>]*cdn\.zudoku\.dev[^>]*>}{}g'
+
 echo "[2/4] package dist/docs"
 tar czf /tmp/zudoku-dist.tgz -C dist/docs .
 

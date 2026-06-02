@@ -13,6 +13,8 @@ const config: ZudokuConfig = {
   basePath: "/docs",
   metadata: {
     favicon: "/tatva_logo.jpeg",
+    title: "%s",
+    defaultTitle: "TatvaCare CRM API",
   },
   navigation: [
     {
