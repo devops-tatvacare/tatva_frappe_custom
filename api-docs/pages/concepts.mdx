@@ -12,11 +12,11 @@ Dedup key: `mobile_no`. **Canonical format is E.164** — `+<country code><digit
 
 Never create a second lead for the same patient because they joined a new program. Instead, **update the existing lead** (or add a profile row — see point 3).
 
-The [Upsert by phone](#tag/write) endpoint enforces this — it finds-or-creates by `mobile_no`. Safe to retry.
+The [Upsert by phone](/docs/api/leads) endpoint enforces this — it finds-or-creates by `mobile_no`. Safe to retry.
 
 ### 2. The lead carries identity, contact, routing. Nothing program-specific.
 
-Universal fields live on `CRM Lead` itself (29 custom fields plus standard Frappe fields). See the [CRMLeadUniversal schema](#tag/write/POST/api/method/upsert_lead_by_phone). Examples: `first_name`, `mobile_no`, `email`, `custom_dob`, `custom_gender`, `custom_caregiver_name`, plus routing (`custom_vertical`, `custom_psp_group`, `custom_current_program`).
+Universal fields live on `CRM Lead` itself (29 custom fields plus standard Frappe fields). See the [CRMLeadUniversal schema](/docs/api/leads#upsert-a-lead-by-phone-recommended). Examples: `first_name`, `mobile_no`, `email`, `custom_dob`, `custom_gender`, `custom_caregiver_name`, plus routing (`custom_vertical`, `custom_psp_group`, `custom_current_program`).
 
 Routing is a 3-level chain:
 
@@ -51,7 +51,7 @@ Profile children are **`istable=1`** in Frappe. That means:
 - You CANNOT call `/api/resource/CRM Plan Profile` directly (returns 403).
 - You read them embedded under the parent: `GET /api/resource/CRM Lead/<name>` returns `custom_plan_profile: [{...}]` inline.
 - You write them embedded: POST / PUT to the parent with `custom_plan_profile: [{...}]`.
-- A `PUT` REPLACES the entire array — to update one field, use [read-modify-write](#tag/write) or the upsert endpoint (which merges automatically).
+- A `PUT` REPLACES the entire array — to update one field, use [read-modify-write](/docs/api/leads) or the upsert endpoint (which merges automatically).
 
 ### 4. Program-scoped substages live in a master, not as columns
 
@@ -59,7 +59,7 @@ Niva Bupa, Anaya Sigrima/Tukavo/Ujvira/Nivolumab — each program has its own su
 
 Instead of having a `niva_substage` column, an `anaya_substage` column, etc., we have ONE `CRM Plan Profile.substage` Link field pointing to a master `CRM Lead Substage`. Each row in the master is keyed `{program}-{substage_name}` — e.g. `Niva Bupa-Payment Link Sent`, `Sigrima-Patient Ready for Chemo`.
 
-New programs add ROWS to that master, never new columns on Plan Profile. Enumerate the valid substages for a program via [Lookups → Lead Substage](#tag/lookups).
+New programs add ROWS to that master, never new columns on Plan Profile. Enumerate the valid substages for a program via [Lookups → Lead Substage](/docs/api/reference-data).
 
 The **universal lead `status` field** (`New / Contacted / Nurture / Qualified / Converted / Junk / Unqualified`) is independent of substage. Substage is the program-specific operational layer; `status` is the coarse universal layer for cross-program reporting.
 

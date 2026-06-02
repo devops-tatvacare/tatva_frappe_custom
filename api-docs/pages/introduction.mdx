@@ -6,7 +6,12 @@ Reference for integrating with the TatvaCare CRM — the single source of truth 
 
 ## What this API does
 
-Write leads (create / update / upsert). Read leads. Discover the data model. Attach files. That's it. Sales operations happen inside the CRM UI — this API is for **systems** putting leads INTO the CRM and reading them back.
+- **Write leads** — create, update, or upsert by phone.
+- **Read leads** — fetch one, list with filters, or count.
+- **Discover the data model** — introspect any doctype's schema at runtime.
+- **Attach files** — upload patient documents against a lead.
+
+It's the systems door into the CRM: external systems put leads in and read state back, while internal teams work those leads in the CRM web app.
 
 ## The shape
 
@@ -17,12 +22,13 @@ Write leads (create / update / upsert). Read leads. Discover the data model. Att
    └── Care & Providers       — coaches, RM, therapist, doctor, hospital
 ```
 
-The lead carries identity, contact, and routing fields. The three children carry concern-specific data. A patient typically has 1–3 child rows populated. Multi-program is normal.
+The lead carries identity, contact, and routing fields. The three children carry concern-specific data. A patient typically has 1–3 child rows populated; multi-program is normal.
 
 ## Where to start
 
-→ **Start here** if you're new: read [Welcome](#tag/welcome), then [Authentication](#tag/authentication), then [Quickstart](#tag/quickstart).
-→ **Already have a key?** Jump to [Write › Upsert by phone](#tag/write).
-→ **Need to know what fields exist?** [Discovery › Introspect a doctype](#tag/discovery).
+- **New here?** Read [Welcome](/docs/welcome), then [Authentication](/docs/api/authentication), then the [Quickstart](/docs/quickstart).
+- **New to Frappe?** Start with [What's a DocType?](/docs/frappe-doctypes) — the concepts this API is built on, in plain English.
+- **Already have a key?** Jump to [Upsert a lead by phone](/docs/api/leads#upsert-a-lead-by-phone-recommended).
+- **Need to know what fields exist?** [Introspect a doctype](/docs/api/schema#introspect-a-doctypes-full-schema).
 
-All endpoints are tested live in the right pane — paste your key, hit *Send Request*.
+Every endpoint is tested live in the **API Reference** — open an endpoint, paste your key, and hit **Send**.

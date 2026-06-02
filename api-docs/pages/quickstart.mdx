@@ -12,7 +12,7 @@ This walks you through the minimum to go from zero to a verified lead in product
 curl -H 'Authorization: token <api_key>:<api_secret>' \
      https://one.tatvacare.in/api/method/frappe.auth.get_logged_user
 ```
-Expected: `{"message":"<your-integration-user>@tatvacare.in"}`. If you get HTML or a 401, the auth header is wrong — see [Authentication](#tag/authentication).
+Expected: `{"message":"<your-integration-user>@tatvacare.in"}`. If you get HTML or a 401, the auth header is wrong — see [Authentication](/docs/api/authentication).
 
 ### 2. Get the valid routing values
 
@@ -24,11 +24,11 @@ curl -H 'Authorization: token KEY:SECRET' \
 # → {"data":[{"name":"GoodFlip"},{"name":"GoodFlip Care"},{"name":"Pill Up"},{"name":"TatvaPractice"}]}
 ```
 
-Repeat for `CRM Group` and `CRM Program`. See [Lookups](#tag/lookups).
+Repeat for `CRM Group` and `CRM Program`. See [Lookups](/docs/api/reference-data).
 
 ### 3. Create your first lead (minimum payload)
 
-The [Upsert](#tag/write) endpoint is the recommended write — idempotent on `mobile_no`, safe to retry.
+The [Upsert](/docs/api/leads) endpoint is the recommended write — idempotent on `mobile_no`, safe to retry.
 
 ```bash
 curl -X POST -H 'Authorization: token KEY:SECRET' -H 'Content-Type: application/json' \
@@ -55,7 +55,7 @@ Returns the full lead doc with embedded `custom_plan_profile[]`, `custom_lab_pro
 
 ### What's next
 
-- Add a **profile row** to your write — see [Write › Upsert by phone](#tag/write) examples.
-- Read the [Concepts](#tag/concepts) page to understand WHY there are 3 profile children.
-- Bookmark [Discovery](#tag/discovery) for runtime schema introspection.
-- Check [Errors](#tag/errors) before you ship anything.
+- Add a **profile row** to your write — see [Write › Upsert by phone](/docs/api/leads) examples.
+- Read the [Concepts](/docs/concepts) page to understand WHY there are 3 profile children.
+- Bookmark [Discovery](/docs/api/schema) for runtime schema introspection.
+- Check [Errors](/docs/errors) before you ship anything.

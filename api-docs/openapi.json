@@ -3,7 +3,7 @@
   "info": {
     "title": "TatvaCare CRM API",
     "version": "1.0.0",
-    "description": "Reference for integrating with the TatvaCare CRM \u2014 the single source of truth for patient leads across every TatvaCare product line.\n\n## What this API does\n\nWrite leads (create / update / upsert). Read leads. Discover the data model. Attach files. That's it. Sales operations happen inside the CRM UI \u2014 this API is for **systems** putting leads INTO the CRM and reading them back.\n\n## The shape\n\n```\n CRM Lead (one row per patient \u2014 deduped by mobile_no)\n   \u251c\u2500\u2500 Plan Profile           \u2014 what plan / PSP / insurance / drug program / subscription\n   \u251c\u2500\u2500 Lab Profile            \u2014 lab values, vitals, conditions, scores\n   \u2514\u2500\u2500 Care & Providers       \u2014 coaches, RM, therapist, doctor, hospital\n```\n\nThe lead carries identity, contact, and routing fields. The three children carry concern-specific data. A patient typically has 1\u20133 child rows populated. Multi-program is normal.\n\n## Where to start\n\n\u2192 **Start here** if you're new: read [Welcome](#tag/welcome), then [Authentication](#tag/authentication), then [Quickstart](#tag/quickstart).\n\u2192 **Already have a key?** Jump to [Write \u203a Upsert by phone](#tag/write).\n\u2192 **Need to know what fields exist?** [Discovery \u203a Introspect a doctype](#tag/discovery).\n\nAll endpoints are tested live in the right pane \u2014 paste your key, hit *Send Request*.",
+    "description": "Reference for integrating with the TatvaCare CRM \u2014 the single source of truth for patient leads across every TatvaCare product line.\n\n## What this API does\n\nWrite leads (create / update / upsert). Read leads. Discover the data model at runtime. Attach files. It's the systems door into the CRM \u2014 external systems put leads in and read state back, while internal teams work those leads in the CRM web app.\n\n## The shape\n\n```\n CRM Lead (one row per patient \u2014 deduped by mobile_no)\n   \u251c\u2500\u2500 Plan Profile           \u2014 what plan / PSP / insurance / drug program / subscription\n   \u251c\u2500\u2500 Lab Profile            \u2014 lab values, vitals, conditions, scores\n   \u2514\u2500\u2500 Care & Providers       \u2014 coaches, RM, therapist, doctor, hospital\n```\n\nThe lead carries identity, contact, and routing fields. The three children carry concern-specific data. A patient typically has 1\u20133 child rows populated. Multi-program is normal.\n\n## Where to start\n\n- **New here?** Read [Welcome](/docs/welcome), then [Authentication](/docs/api/authentication), then the [Quickstart](/docs/quickstart).\n- **New to Frappe?** Start with [What's a DocType?](/docs/frappe-doctypes) \u2014 the concepts this API is built on, in plain English.\n- **Already have a key?** Jump to [Upsert a lead by phone](/docs/api/leads#upsert-a-lead-by-phone-recommended).\n- **Need to know what fields exist?** [Introspect a doctype](/docs/api/schema#introspect-a-doctypes-full-schema).\n\nEvery endpoint is tested live in the **API Reference** \u2014 open an endpoint, paste your key, and hit **Send**.",
     "contact": {
       "name": "TatvaCare CRM Ops",
       "email": "pareekshith.bompally@tatvacare.in"
@@ -40,7 +40,7 @@
   "tags": [
     {
       "name": "Authentication",
-      "description": "## How to authenticate\n\nEvery request needs an `Authorization` header. Format:\n\n```\nAuthorization: token <api_key>:<api_secret>\n```\n\nThe word `token` is **literal lowercase**, followed by a single space, then `api_key`, a colon `:`, then `api_secret`. No `Bearer`, no quotes, no JWT.\n\nA real example:\n\n```\nAuthorization: token 3ae28a4abc8527d:08f94c85b82a1d2\n```\n\n### How to get a key\n\n1. **Email** `pareekshith.bompally@tatvacare.in` with: integration name, who owns it, expected request volume.\n2. **You receive** a dedicated user (e.g. `mytatva-writer@tatvacare.in`) plus its `api_key:api_secret` pair. The user has the **System Manager** role so it can write the permission-locked routing fields (`custom_vertical`, `custom_psp_group`, `custom_current_program`, `custom_origin_vertical`, `custom_previous_program`, `custom_program_lifecycle_stage`). A regular user key would silently drop those fields on write \u2014 don't try.\n3. **Store** the pair as one environment variable: `FRAPPE_API_TOKEN=\"3ae28a4abc8527d:08f94c85b82a1d2\"`. Treat it like a database password.\n\n### One key per integration\n\nDon't share keys across systems. Each integration gets its own user + key so we can revoke / rotate / audit per integration. If you need a key for staging plus a separate one for prod, request both.\n\n### Verify your key works\n\nThe fastest handshake \u2014 returns the authenticated user's email if the key is valid:\n\n```bash\ncurl -H 'Authorization: token <api_key>:<api_secret>' \\\n     https://one.tatvacare.in/api/method/frappe.auth.get_logged_user\n```\n\nSuccess returns `{\"message\":\"mytatva-writer@tatvacare.in\"}`. A `401` means the header is malformed (most often: missing the literal word `token`, extra spaces, swapped key/secret order).\n\n### Rotation, revocation, leakage\n\nIf a key is ever leaked, exposed in logs, committed to git \u2014 email CRM Ops immediately. We'll revoke it (the user gets disabled) and reissue a fresh pair. The new pair has different values; update your env var and redeploy.\n\nRoutine rotation isn't enforced today; we'll add a schedule if/when compliance requires it.\n\n### What the key can NOT do\n\n- It can't bypass field-level validation (Link values must exist, required fields can't be empty).\n- It can't call non-whitelisted methods (anything not documented here or under `frappe.client.*`).\n- It can't see leads outside the CRM site (it's scoped to this site only)."
+      "description": "## How to authenticate\n\nEvery request needs an `Authorization` header. Format:\n\n```\nAuthorization: token <api_key>:<api_secret>\n```\n\nThe word `token` is **literal lowercase**, followed by a single space, then `api_key`, a colon `:`, then `api_secret`. No `Bearer`, no quotes, no JWT.\n\nA real example:\n\n```\nAuthorization: token 3ae28a4abc8527d:08f94c85b82a1d2\n```\n\n### How to get a key\n\n1. **Email** `pareekshith.bompally@tatvacare.in` with: integration name, who owns it, expected request volume.\n2. **You receive** a dedicated user (e.g. `mytatva-writer@tatvacare.in`) plus its `api_key:api_secret` pair. The user has the **System Manager** role so it can write the permission-locked routing fields (`custom_vertical`, `custom_psp_group`, `custom_current_program`, `custom_origin_vertical`, `custom_previous_program`, `custom_program_lifecycle_stage`). A regular user key would silently drop those fields on write, which is why integration keys are provisioned with this role.\n3. **Store** the pair as one environment variable: `FRAPPE_API_TOKEN=\"3ae28a4abc8527d:08f94c85b82a1d2\"`. Treat it like a database password.\n\n### One key per integration\n\nDon't share keys across systems. Each integration gets its own user + key so we can revoke / rotate / audit per integration. If you need a key for staging plus a separate one for prod, request both.\n\n### Verify your key works\n\nThe fastest handshake \u2014 returns the authenticated user's email if the key is valid:\n\n```bash\ncurl -H 'Authorization: token <api_key>:<api_secret>' \\\n     https://one.tatvacare.in/api/method/frappe.auth.get_logged_user\n```\n\nSuccess returns `{\"message\":\"mytatva-writer@tatvacare.in\"}`. A `401` means the header is malformed (most often: missing the literal word `token`, extra spaces, swapped key/secret order).\n\n### Rotation, revocation, leakage\n\nIf a key is ever leaked, exposed in logs, committed to git \u2014 email CRM Ops immediately. We'll revoke it (the user gets disabled) and reissue a fresh pair. The new pair has different values; update your env var and redeploy.\n\nRoutine rotation isn't enforced today; we'll add a schedule if/when compliance requires it.\n\n### What the key can NOT do\n\n- It can't bypass field-level validation (Link values must exist, required fields can't be empty).\n- It can't call non-whitelisted methods (anything not documented here or under `frappe.client.*`).\n- It can't see leads outside the CRM site (it's scoped to this site only)."
     },
     {
       "name": "Leads",
@@ -56,7 +56,7 @@
     },
     {
       "name": "Schema",
-      "description": "## Runtime schema introspection \u2014 don't hardcode field lists\n\nThe API docs you're reading lists every field on `CRM Lead` and the three profile children. But the source of truth is the LIVE Frappe doctype definition \u2014 and you can fetch it directly. Do this in your integration code so you adapt automatically when new fields are added.\n\n### Read a doctype's full definition\n\nEvery Frappe doctype is itself accessible via REST. Get the full schema (every field, type, options, validations) with:\n\n```bash\ncurl -H 'Authorization: token KEY:SECRET' \\\n     https://one.tatvacare.in/api/resource/DocType/CRM%20Lead\n```\n\nThe response includes a `data.fields[]` array \u2014 each entry is one field with attributes `fieldname`, `fieldtype` (`Data`/`Select`/`Link`/`Date`/`Datetime`/`Int`/`Float`/`Check`/`Currency`/`Small Text`/`Long Text`/`Table`/`Section Break`/`Column Break`/`Tab Break`/etc.), `label`, `reqd` (required), `options` (for Link: the target doctype name; for Select: newline-separated valid values), `permlevel` (0=anyone, 1=manager-only), and more.\n\nSame call works for the children \u2014 replace the name in the URL (URL-encode spaces):\n\n```\nGET /api/resource/DocType/CRM%20Plan%20Profile\nGET /api/resource/DocType/CRM%20Lab%20Profile\nGET /api/resource/DocType/CRM%20Care%20Providers%20Profile\nGET /api/resource/DocType/CRM%20Lead%20Substage\n```\n\n### List records of any doctype\n\nThe `/api/resource/<DocType>` pattern lists records:\n\n```bash\ncurl -H 'Authorization: token KEY:SECRET' \\\n     -G --data-urlencode 'filters=[[\"custom_psp_group\",\"=\",\"Anaya\"]]' \\\n        --data-urlencode 'fields=[\"name\",\"first_name\",\"mobile_no\",\"status\"]' \\\n        --data-urlencode 'limit_page_length=50' \\\n     https://one.tatvacare.in/api/resource/CRM%20Lead\n```\n\nSee [Read](#tag/read) for the full filter / pagination syntax.\n\n### When schema changes happen\n\nWhen we add a field, you'll see it appear in the doctype definition. Your code keeps working \u2014 your existing writes succeed (new field is optional and nullable), your reads return the extra field which you can ignore until you're ready to consume it. We notify integrators via email before any **breaking** change (renames, deletes, validation tightening).\n\n### Beyond Lead\n\nThe entire Frappe REST pattern works for ANY doctype. If you discover a need (e.g. read `CRM Call Log` records linked to a lead), the same `/api/resource/<DocType>` pattern applies. The doctypes worth knowing about for an integrator:\n\n- `CRM Lead` (this spec's primary target)\n- `CRM Plan Profile`, `CRM Lab Profile`, `CRM Care Providers Profile` (children of Lead)\n- `CRM Lead Substage` (program-scoped substage master)\n- `CRM Vertical`, `CRM Group`, `CRM Program` (routing masters)\n- `CRM Lead Status`, `CRM Lead Source`, `CRM Lost Reason` (universal lookup masters)\n- `CRM Call Log`, `CRM Task`, `FCRM Note`, `Comment`, `Communication`, `ToDo` (activity-adjacent \u2014 read about them in Frappe's standard docs)\n- `File` (attachments \u2014 see [Attachments](#tag/attachments))\n\nIf you find yourself reaching for a non-Lead doctype, email Ops first \u2014 we want to know what use case you're hitting so we can document it (or wrap it in a saner endpoint)."
+      "description": "## Runtime schema introspection \u2014 don't hardcode field lists\n\nThe API docs you're reading lists every field on `CRM Lead` and the three profile children. But the source of truth is the LIVE Frappe doctype definition \u2014 and you can fetch it directly. Do this in your integration code so you adapt automatically when new fields are added.\n\n### Read a doctype's full definition\n\nEvery Frappe doctype is itself accessible via REST. Get the full schema (every field, type, options, validations) with:\n\n```bash\ncurl -H 'Authorization: token KEY:SECRET' \\\n     https://one.tatvacare.in/api/resource/DocType/CRM%20Lead\n```\n\nThe response includes a `data.fields[]` array \u2014 each entry is one field with attributes `fieldname`, `fieldtype` (`Data`/`Select`/`Link`/`Date`/`Datetime`/`Int`/`Float`/`Check`/`Currency`/`Small Text`/`Long Text`/`Table`/`Section Break`/`Column Break`/`Tab Break`/etc.), `label`, `reqd` (required), `options` (for Link: the target doctype name; for Select: newline-separated valid values), `permlevel` (0=anyone, 1=manager-only), and more.\n\nSame call works for the children \u2014 replace the name in the URL (URL-encode spaces):\n\n```\nGET /api/resource/DocType/CRM%20Plan%20Profile\nGET /api/resource/DocType/CRM%20Lab%20Profile\nGET /api/resource/DocType/CRM%20Care%20Providers%20Profile\nGET /api/resource/DocType/CRM%20Lead%20Substage\n```\n\n### List records of any doctype\n\nThe `/api/resource/<DocType>` pattern lists records:\n\n```bash\ncurl -H 'Authorization: token KEY:SECRET' \\\n     -G --data-urlencode 'filters=[[\"custom_psp_group\",\"=\",\"Anaya\"]]' \\\n        --data-urlencode 'fields=[\"name\",\"first_name\",\"mobile_no\",\"status\"]' \\\n        --data-urlencode 'limit_page_length=50' \\\n     https://one.tatvacare.in/api/resource/CRM%20Lead\n```\n\nSee [Read](/docs/api/leads) for the full filter / pagination syntax.\n\n### When schema changes happen\n\nWhen we add a field, you'll see it appear in the doctype definition. Your code keeps working \u2014 your existing writes succeed (new field is optional and nullable), your reads return the extra field which you can ignore until you're ready to consume it. We notify integrators via email before any **breaking** change (renames, deletes, validation tightening).\n\n### Beyond Lead\n\nThe entire Frappe REST pattern works for ANY doctype. If you discover a need (e.g. read `CRM Call Log` records linked to a lead), the same `/api/resource/<DocType>` pattern applies. The doctypes worth knowing about for an integrator:\n\n- `CRM Lead` (this spec's primary target)\n- `CRM Plan Profile`, `CRM Lab Profile`, `CRM Care Providers Profile` (children of Lead)\n- `CRM Lead Substage` (program-scoped substage master)\n- `CRM Vertical`, `CRM Group`, `CRM Program` (routing masters)\n- `CRM Lead Status`, `CRM Lead Source`, `CRM Lost Reason` (universal lookup masters)\n- `CRM Call Log`, `CRM Task`, `FCRM Note`, `Comment`, `Communication`, `ToDo` (activity-adjacent \u2014 read about them in Frappe's standard docs)\n- `File` (attachments \u2014 see [Attachments](/docs/api/files))\n\nIf you find yourself reaching for a non-Lead doctype, email Ops first \u2014 we want to know what use case you're hitting so we can document it (or wrap it in a saner endpoint)."
     }
   ],
   "security": [
@@ -70,13 +70,13 @@
         "type": "apiKey",
         "in": "header",
         "name": "Authorization",
-        "description": "Format: `token <api_key>:<api_secret>` \u2014 literal lowercase `token`, single space, key:secret joined by `:`. See the [Authentication](#tag/authentication) page for how to request a key and a one-liner to verify it works."
+        "description": "Format: `token <api_key>:<api_secret>` \u2014 literal lowercase `token`, single space, key:secret joined by `:`. See the [Authentication](/docs/api/authentication) page for how to request a key and a one-liner to verify it works."
       }
     },
     "schemas": {
       "CRMLeadUniversal": {
         "type": "object",
-        "description": "Universal fields on `CRM Lead` itself. 29 custom fields plus standard Frappe fields. Profile children (`custom_plan_profile`, `custom_lab_profile`, `custom_care_providers_profile`) are pointers to embedded child arrays \u2014 see [Concepts](#tag/concepts) for the model.",
+        "description": "Universal fields on `CRM Lead` itself. 29 custom fields plus standard Frappe fields. Profile children (`custom_plan_profile`, `custom_lab_profile`, `custom_care_providers_profile`) are pointers to embedded child arrays \u2014 see [Concepts](/docs/concepts) for the model.",
         "properties": {
           "name": {
             "type": "string",
@@ -112,7 +112,7 @@
           },
           "status": {
             "type": "string",
-            "description": "**Required on create.** Universal lifecycle status. New leads start as `New`. Junk and Unqualified are 'Lost' type and require `lost_reason`. Enumerate live values via [Lookups \u2192 Lead Status](#tag/lookups).",
+            "description": "**Required on create.** Universal lifecycle status. New leads start as `New`. Junk and Unqualified are 'Lost' type and require `lost_reason`. Enumerate live values via [Lookups \u2192 Lead Status](/docs/api/reference-data).",
             "enum": [
               "New",
               "Contacted",
@@ -126,7 +126,7 @@
           },
           "source": {
             "type": "string",
-            "description": "Lead acquisition channel. Link to `CRM Lead Source`. Enumerate via [Lookups \u2192 Lead Source](#tag/lookups)."
+            "description": "Lead acquisition channel. Link to `CRM Lead Source`. Enumerate via [Lookups \u2192 Lead Source](/docs/api/reference-data)."
           },
           "lead_owner": {
             "type": "string",
@@ -160,7 +160,7 @@
               "Pill Up",
               "TatvaPractice"
             ],
-            "description": "**Permission-locked** (`permlevel=1`). Top-level product line. Link to `CRM Vertical`. See [Concepts \u203a routing chain](#tag/concepts)."
+            "description": "**Permission-locked** (`permlevel=1`). Top-level product line. Link to `CRM Vertical`. See [Concepts \u203a routing chain](/docs/concepts)."
           },
           "custom_psp_group": {
             "type": "string",
@@ -185,7 +185,7 @@
               "Tukavo",
               "Ujvira"
             ],
-            "description": "**Permission-locked.** The PRIMARY program. Link to `CRM Program`. Multi-program patients are supported via profile-row presence (see [Concepts](#tag/concepts))."
+            "description": "**Permission-locked.** The PRIMARY program. Link to `CRM Program`. Multi-program patients are supported via profile-row presence (see [Concepts](/docs/concepts))."
           },
           "custom_previous_program": {
             "type": "string",
@@ -288,7 +288,7 @@
             "items": {
               "$ref": "#/components/schemas/PlanProfile"
             },
-            "description": "**Embedded child rows** (max 1 today). Plan / PSP / subscription / drug-program / payment / acquisition / dx-funnel data. On PUT, the array REPLACES the existing rows \u2014 see [Write \u203a profile semantics](#tag/write)."
+            "description": "**Embedded child rows** (max 1 today). Plan / PSP / subscription / drug-program / payment / acquisition / dx-funnel data. On PUT, the array REPLACES the existing rows \u2014 see [Write \u203a profile semantics](/docs/api/leads)."
           },
           "custom_lab_profile": {
             "type": "array",
@@ -329,7 +329,7 @@
       },
       "PlanProfile": {
         "type": "object",
-        "description": "Child of `CRM Lead`. 79 fields. Holds everything plan-shaped: subscription / PSP enrollment, drug-program clinical (oncology), Rx workflow, payment + insurer fields, acquisition (UTM + signup), diagnostic-funnel timestamps, and the program-scoped substage Link. See [Concepts](#tag/concepts) for why this is sliced by concern, not by program.",
+        "description": "Child of `CRM Lead`. 79 fields. Holds everything plan-shaped: subscription / PSP enrollment, drug-program clinical (oncology), Rx workflow, payment + insurer fields, acquisition (UTM + signup), diagnostic-funnel timestamps, and the program-scoped substage Link. See [Concepts](/docs/concepts) for why this is sliced by concern, not by program.",
         "properties": {
           "signup_date": {
             "type": "string",
@@ -674,7 +674,7 @@
           },
           "substage": {
             "type": "string",
-            "description": "**Program-scoped operational stage.** Link to `CRM Lead Substage`. Value format is `{program}-{substage_name}` (e.g. `Niva Bupa-Payment Link Sent`, `Sigrima-Patient Ready for Chemo`). Enumerate valid values for a program via [Lookups \u203a Lead Substage](#tag/lookups). The universal `status` field on `CRM Lead` is independent of substage \u2014 see [Concepts \u203a substages](#tag/concepts).",
+            "description": "**Program-scoped operational stage.** Link to `CRM Lead Substage`. Value format is `{program}-{substage_name}` (e.g. `Niva Bupa-Payment Link Sent`, `Sigrima-Patient Ready for Chemo`). Enumerate valid values for a program via [Lookups \u203a Lead Substage](/docs/api/reference-data). The universal `status` field on `CRM Lead` is independent of substage \u2014 see [Concepts \u203a substages](/docs/concepts).",
             "example": "Niva Bupa-Payment Link Sent"
           }
         }
@@ -906,7 +906,7 @@
       },
       "UpsertLeadResponse": {
         "type": "object",
-        "description": "Always HTTP 200 today (silent-200 quirk pending patch \u2014 see [Errors](#tag/errors)). Check `message.ok` (boolean) for success.",
+        "description": "Always HTTP 200 today (silent-200 quirk pending patch \u2014 see [Errors](/docs/errors)). Check `message.ok` (boolean) for success.",
         "properties": {
           "message": {
             "type": "object",
@@ -1338,7 +1338,7 @@
           "Leads"
         ],
         "summary": "Upsert a lead by phone (recommended)",
-        "description": "**The recommended write endpoint for ~99% of integrations.** Idempotent on `mobile_no`. Safe to retry. Finds an existing lead by `mobile_no` and updates it, or creates a new one. Profile children are passed as embedded arrays \u2014 same shape as standard REST.\n\n### How it merges\n\nFor an existing lead, fields you SEND are updated; fields you OMIT are LEFT ALONE. For profile children, fields you send ARE MERGED into the existing row (not replaced wholesale). This is the safest write pattern \u2014 use it unless you specifically need raw REST semantics.\n\n### Default-fill behaviour\n\n- Missing `first_name` \u2192 set to `(no name)`\n- Missing `status` \u2192 set to `New`\n- Profile arrays accept either actual JSON arrays or stringified JSON (the script parses both).\n\n### Always check `message.ok` (not HTTP status)\n\nHTTP 200 is returned even on failure today (silent-200 quirk pending patch). Inspect the boolean `message.ok` field. A patch will set HTTP 422 on the failure path; the boolean check works in both cases \u2014 safe to write your client code against `message.ok` today.\n\n### Common pitfalls\n\n- Sending an unknown Link value (e.g. mistyped program name) \u2192 `message.ok: false` with `LinkValidationError` in the error string. Fix: read [Lookups](#tag/lookups) first.\n- Setting `status` to `Junk` or `Unqualified` without `lost_reason` \u2192 `ValidationError: Please specify a reason for losing the lead.` Add `lost_reason` from the [Lookups](#tag/lookups) values.\n- Sending a `lead_owner` email that isn't a real Frappe user \u2192 `LinkValidationError`. Leave blank if unsure.\n\n### Related\n\n[Read \u203a Get one lead](#tag/read) to fetch the lead back after writing. [Lookups](#tag/lookups) to enumerate valid Link values before writing.",
+        "description": "**The recommended write endpoint for ~99% of integrations.** Idempotent on `mobile_no`. Safe to retry. Finds an existing lead by `mobile_no` and updates it, or creates a new one. Profile children are passed as embedded arrays \u2014 same shape as standard REST.\n\n### How it merges\n\nFor an existing lead, fields you SEND are updated; fields you OMIT are LEFT ALONE. For profile children, fields you send ARE MERGED into the existing row (not replaced wholesale). This is the safest write pattern \u2014 use it unless you specifically need raw REST semantics.\n\n### Default-fill behaviour\n\n- Missing `first_name` \u2192 set to `(no name)`\n- Missing `status` \u2192 set to `New`\n- Profile arrays accept either actual JSON arrays or stringified JSON (the script parses both).\n\n### Always check `message.ok` (not HTTP status)\n\nHTTP 200 is returned even on failure today (silent-200 quirk pending patch). Inspect the boolean `message.ok` field. A patch will set HTTP 422 on the failure path; the boolean check works in both cases \u2014 safe to write your client code against `message.ok` today.\n\n### Common pitfalls\n\n- Sending an unknown Link value (e.g. mistyped program name) \u2192 `message.ok: false` with `LinkValidationError` in the error string. Fix: read [Lookups](/docs/api/reference-data) first.\n- Setting `status` to `Junk` or `Unqualified` without `lost_reason` \u2192 `ValidationError: Please specify a reason for losing the lead.` Add `lost_reason` from the [Lookups](/docs/api/reference-data) values.\n- Sending a `lead_owner` email that isn't a real Frappe user \u2192 `LinkValidationError`. Leave blank if unsure.\n\n### Related\n\n[Read \u203a Get one lead](/docs/api/leads) to fetch the lead back after writing. [Lookups](/docs/api/reference-data) to enumerate valid Link values before writing.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1410,7 +1410,7 @@
           "Leads"
         ],
         "summary": "List leads (filtered, paginated)",
-        "description": "Standard Frappe list endpoint. Returns the requested `fields` for leads matching `filters`, paginated.\n\nFilter operator vocabulary, pagination, and `--data-urlencode` curl pattern are explained in [Read](#tag/read).",
+        "description": "Standard Frappe list endpoint. Returns the requested `fields` for leads matching `filters`, paginated.\n\nFilter operator vocabulary, pagination, and `--data-urlencode` curl pattern are explained in [Read](/docs/api/leads).",
         "parameters": [
           {
             "name": "filters",
@@ -1564,7 +1564,7 @@
           "Leads"
         ],
         "summary": "Update a lead (partial \u2014 raw REST)",
-        "description": "Send only changed fields.\n\n### Profile child semantics\n\nA PUT with `custom_plan_profile: [{...}]` **REPLACES** the entire array. To update a single field on the existing row without losing the rest, use **read-modify-write**:\n\n```python\nlead = GET /api/resource/CRM Lead/{name}\nrow  = (lead.custom_plan_profile or [{}])[0]\nrow['dx_landing_at'] = '2026-06-02 10:15:00'\nPUT /api/resource/CRM Lead/{name}  body={'custom_plan_profile': [row]}\n```\n\n**Or just use [Upsert by phone](#tag/write)** \u2014 it merges your fields into the existing row automatically.",
+        "description": "Send only changed fields.\n\n### Profile child semantics\n\nA PUT with `custom_plan_profile: [{...}]` **REPLACES** the entire array. To update a single field on the existing row without losing the rest, use **read-modify-write**:\n\n```python\nlead = GET /api/resource/CRM Lead/{name}\nrow  = (lead.custom_plan_profile or [{}])[0]\nrow['dx_landing_at'] = '2026-06-02 10:15:00'\nPUT /api/resource/CRM Lead/{name}  body={'custom_plan_profile': [row]}\n```\n\n**Or just use [Upsert by phone](/docs/api/leads)** \u2014 it merges your fields into the existing row automatically.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1619,7 +1619,7 @@
           "Schema"
         ],
         "summary": "Introspect a doctype's full schema",
-        "description": "Returns the live doctype definition: every field with `fieldname`, `fieldtype`, `label`, `reqd`, `options` (Link target or Select options), `permlevel`, etc. See [Discovery](#tag/discovery) for how to use this in your integration code.\n\nWorks for ANY doctype \u2014 Lead, profiles, lookups, even Frappe core doctypes like `User` or `File`.",
+        "description": "Returns the live doctype definition: every field with `fieldname`, `fieldtype`, `label`, `reqd`, `options` (Link target or Select options), `permlevel`, etc. See [Discovery](/docs/api/schema) for how to use this in your integration code.\n\nWorks for ANY doctype \u2014 Lead, profiles, lookups, even Frappe core doctypes like `User` or `File`.",
         "responses": {
           "200": {
             "description": "Full doctype definition.",

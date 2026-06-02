@@ -35,12 +35,12 @@ Always check `message.ok` for upsert; check HTTP status for everything else.
 | 404 | `LinkValidationError` | A Link field value isn't in its master | Read the lookup master first to enumerate valid values. The message names the master that's missing. |
 | 409 | `DuplicateEntryError` | A unique constraint was violated (currently only `custom_lsq_prospect_id`) | Either the value is already taken or your write is racing with another. Upsert by phone avoids this — use it. |
 | 417 | `MandatoryError` | A required field is missing | Body is missing `first_name` or `status`. The upsert endpoint default-fills these — use it. |
-| 429 | `RateLimitExceeded` | You're hitting the API too fast | Back off exponentially (1s, 2s, 4s, …). See [Operations › Rate limits](#tag/operations). |
+| 429 | `RateLimitExceeded` | You're hitting the API too fast | Back off exponentially (1s, 2s, 4s, …). See [Operations › Rate limits](/docs/operations). |
 | 5xx | (various) | Server error — usually transient | Retry with exponential backoff. If persistent, email Ops with the exact request + response. |
 
 ### Specific errors integrators hit most often
 
 - **`LinkValidationError: Could not find CRM Program: ...`** — you sent a program value that doesn't exist. Fix: `GET /api/resource/CRM%20Program` to enumerate, then resend with a valid value.
-- **`Please specify a reason for losing the lead`** — you set `status` to `Junk` or `Unqualified` without `lost_reason`. Add `lost_reason` from the [Lookups → Lost Reason](#tag/lookups) values.
+- **`Please specify a reason for losing the lead`** — you set `status` to `Junk` or `Unqualified` without `lost_reason`. Add `lost_reason` from the [Lookups → Lost Reason](/docs/api/reference-data) values.
 - **Routing fields silently missing on the lead after a write** — your key isn't System Manager. Email Ops for a new key with the right role.
 - **HTML page returned with login form** — your key is wrong / the header is missing the `token` prefix. Frappe falls back to the website login when auth fails on `/api/resource/...`.
