@@ -27,7 +27,7 @@ const config: ZudokuConfig = {
         { type: "category", label: "Architecture", items: ["concepts"] },
         { type: "category", label: "Channels", items: ["whatsapp", "telephony"] },
         { type: "category", label: "Administration", items: ["users", "roles-and-permissions"] },
-        { type: "category", label: "Reference", items: ["errors", "operations", "tags"] },
+        { type: "category", label: "Reference", items: ["errors", "operations", "jobs", "tags"] },
       ],
     },
     { type: "link", to: "/api", label: "API Reference", icon: "code" },

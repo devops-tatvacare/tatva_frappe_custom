@@ -40,7 +40,8 @@
       "name": "Administration",
       "tags": [
         "Users",
-        "Roles and Permissions"
+        "Roles and Permissions",
+        "Jobs"
       ]
     },
     {
@@ -75,7 +76,7 @@
     },
     {
       "name": "WhatsApp",
-      "description": "## WhatsApp on a lead\n\n> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nEvery WhatsApp message \u2014 inbound or outbound \u2014 is a row in the **`WhatsApp Message`** doctype, linked to its lead via `reference_doctype` + `reference_name`. So you read a conversation the same way you read anything else: a filtered `GET /api/resource/WhatsApp Message`.\n\nSending is doctype-driven too \u2014 inserting a `WhatsApp Message` row triggers the actual send behind the scenes, routed through **WATI** (our WhatsApp provider) so the team's existing templates and broadcasts keep working. Multi-sender is built in: one **`WhatsApp Account`** row per WhatsApp number, so different product lines can send from different numbers.\n\nSee [WhatsApp](/docs/whatsapp) in the Documentation tab for the full picture."
+      "description": "## WhatsApp on a lead\n\n> **Rollout note.** Ships with the WATI integration; a `404` means the integration app isn't deployed on that environment yet.\n\nEvery WhatsApp message \u2014 inbound or outbound \u2014 is a row in the **`WhatsApp Message`** doctype, linked to its lead via `reference_doctype` + `reference_name`. So you read a conversation the same way you read anything else: a filtered `GET /api/resource/WhatsApp Message`.\n\nSending is doctype-driven too \u2014 inserting a `WhatsApp Message` row triggers the actual send behind the scenes, routed through **WATI** (our WhatsApp provider) so the team's existing templates and broadcasts keep working. Multi-sender is built in: one **`WhatsApp Account`** row per WhatsApp number, so different product lines can send from different numbers.\n\nSee [WhatsApp](/docs/whatsapp) in the Documentation tab for the full picture."
     },
     {
       "name": "Telephony",
@@ -92,6 +93,10 @@
     {
       "name": "Tags",
       "description": "## Label leads and find them fast\n\nTags are free-form labels on a lead (`vip`, `reactivation`, \u2026) \u2014 the quickest way to slice leads without adding a field. Frappe keeps them in two synced places: a denormalised `_user_tags` string on the lead (good for a quick `like` filter) and a **`Tag Link`** row per (tag, document) pair (the clean way to ask *which* leads carry a tag). The label vocabulary lives in the **`Tag`** doctype.\n\nAlways set/clear tags through the whitelisted `add_tag` / `remove_tag` methods so both stores stay consistent \u2014 never write `_user_tags` by hand. See [Tags](/docs/tags) in the Documentation tab."
+    },
+    {
+      "name": "Jobs",
+      "description": "Scheduled and background jobs. `Scheduled Job Type` holds the definitions (method, cron, stopped, last run); `Scheduled Job Log` holds the execution history. Both are read-only over the API and require System Manager. There is no REST endpoint to trigger a job (Desk / bench only). See the Jobs guide for the inventory."
     }
   ],
   "security": [
@@ -2123,8 +2128,8 @@
         "tags": [
           "WhatsApp"
         ],
-        "summary": "List a lead's WhatsApp messages (planned)",
-        "description": "> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nRead a lead's WhatsApp thread. Filter by `reference_doctype` = `CRM Lead` and `reference_name` = the lead's name (note: WhatsApp uses `reference_name`, calls use `reference_docname`).\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'filters=[[\"reference_doctype\",\"=\",\"CRM Lead\"],[\"reference_name\",\"=\",\"CRM-LEAD-2026-00123\"]]' \\\n  --data-urlencode 'order_by=creation asc' \\\n  https://one.tatvacare.in/api/resource/WhatsApp%20Message\n```",
+        "summary": "List a lead's WhatsApp messages",
+        "description": "Read a lead's WhatsApp thread. Filter by `reference_doctype` = `CRM Lead` and `reference_name` = the lead's name (note: WhatsApp uses `reference_name`, calls use `reference_docname`).\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'filters=[[\"reference_doctype\",\"=\",\"CRM Lead\"],[\"reference_name\",\"=\",\"CRM-LEAD-2026-00123\"]]' \\\n  --data-urlencode 'order_by=creation asc' \\\n  https://one.tatvacare.in/api/resource/WhatsApp%20Message\n```",
         "parameters": [
           {
             "name": "filters",
@@ -2191,60 +2196,6 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/WhatsAppMessage"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/method/send_whatsapp_to_lead": {
-      "post": {
-        "tags": [
-          "WhatsApp"
-        ],
-        "summary": "Send a WhatsApp message to a lead (planned)",
-        "description": "> **Status \u2014 planned.** This surface ships with the integration rollout; it is **not deployed yet**, so the live server returns `404`. The shape below is the contract you'll integrate against.\n\nSend a session message or an approved template to a lead. Under the hood this inserts a `WhatsApp Message` row, which triggers the WATI send and threads delivery status back onto the same row. The exact method signature is finalised with the WATI rollout; the body below is the intended shape.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "lead"
-                ],
-                "properties": {
-                  "lead": {
-                    "type": "string",
-                    "example": "CRM-LEAD-2026-00123"
-                  },
-                  "template_name": {
-                    "type": "string",
-                    "example": "document_approved",
-                    "description": "For a template send."
-                  },
-                  "message": {
-                    "type": "string",
-                    "description": "For a free-text session message (24h window)."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Queued for send.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
                       "$ref": "#/components/schemas/WhatsAppMessage"
                     }
                   }
@@ -3416,6 +3367,322 @@
         "responses": {
           "200": {
             "description": "Tag removed."
+          }
+        }
+      }
+    },
+    "/api/method/tatva_connect.api.whatsapp.send_template_with_params": {
+      "post": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Send an approved template to a lead",
+        "description": "Send a WATI-approved template to a lead, filling its {{N}} variables. Inserts a `WhatsApp Message` row; the WATI send + status threading run behind it. The account is resolved from the lead's routing (a lead with no route is rejected \u2014 never sent through the wrong tenant). Requires System Manager.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reference_doctype",
+                  "reference_name",
+                  "template",
+                  "to"
+                ],
+                "properties": {
+                  "reference_doctype": {
+                    "type": "string",
+                    "example": "CRM Lead"
+                  },
+                  "reference_name": {
+                    "type": "string",
+                    "example": "CRM-LEAD-2026-00123"
+                  },
+                  "template": {
+                    "type": "string",
+                    "example": "3_days_before_chemo::Anaya WATI 360078",
+                    "description": "Account-scoped record name (templatename::Account)."
+                  },
+                  "to": {
+                    "type": "string",
+                    "example": "+919059067327"
+                  },
+                  "body_param": {
+                    "type": "string",
+                    "example": "{\"1\": \"Asha\", \"2\": \"12 Jun\"}",
+                    "description": "JSON object keyed by the real {{N}} index. Omit for a static template."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created \u2014 returns the new WhatsApp Message name.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/method/tatva_connect.api.whatsapp.refresh_messages_from_wati": {
+      "post": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Refresh a lead's thread from WATI",
+        "description": "Rebuild ONE lead's WhatsApp thread from WATI's authoritative history (getMessages, all pages). Scoped to that lead, idempotent (keyed on WATI's message id), and never re-sends (rows are written directly). Backs the 'Refresh WhatsApp' button on the lead header. Requires System Manager.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reference_doctype",
+                  "reference_name"
+                ],
+                "properties": {
+                  "reference_doctype": {
+                    "type": "string",
+                    "example": "CRM Lead"
+                  },
+                  "reference_name": {
+                    "type": "string",
+                    "example": "CRM-LEAD-2026-00123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK \u2014 returns { count, account }.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/method/tatva_connect.wati.templates_sync.sync_from_wati": {
+      "post": {
+        "tags": [
+          "WhatsApp"
+        ],
+        "summary": "Sync templates from WATI",
+        "description": "Mirror approved WATI templates into the read-only `WhatsApp Templates` catalog. No body syncs EVERY WATI account; pass account_name to sync one. Records are keyed per account (name::Account). Also runs automatically every 6 hours. Requires System Manager.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "properties": {
+                  "account_name": {
+                    "type": "string",
+                    "example": "Anaya WATI 360078",
+                    "description": "Optional \u2014 omit to sync all WATI accounts."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK \u2014 returns per-account {created, updated, skipped} counts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/Scheduled Job Type": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "List scheduled jobs",
+        "description": "Every scheduled job and its schedule. `stopped=1` is disabled; `last_execution` is null if it has never run (e.g. scheduler paused). Filter `method like \"%tatva_connect%\"` for just the custom jobs.\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'fields=[\"name\",\"method\",\"frequency\",\"cron_format\",\"stopped\",\"last_execution\"]' \\\n  --data-urlencode 'limit_page_length=0' \\\n  'https://one.tatvacare.in/api/resource/Scheduled Job Type'\n```",
+        "parameters": [
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[[\"method\",\"like\",\"%tatva_connect%\"]]"
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[\"name\",\"method\",\"frequency\",\"cron_format\",\"stopped\",\"last_execution\"]"
+          },
+          {
+            "name": "limit_page_length",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "0",
+            "description": "0 = no limit."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/Scheduled Job Type/{name}": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Read one scheduled job",
+        "description": "Full definition of a single job, e.g. `templates_sync.scheduled_sync_all`.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "templates_sync.scheduled_sync_all"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource/Scheduled Job Log": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Scheduled job execution history",
+        "description": "Did a job run, and did it fail? `status` is `Complete` / `Failed` / `Scheduled`; a failed row's `details` holds the traceback.\n\n```bash\ncurl -G -H 'Authorization: token KEY:SECRET' \\\n  --data-urlencode 'filters=[[\"scheduled_job_type\",\"=\",\"templates_sync.scheduled_sync_all\"]]' \\\n  --data-urlencode 'order_by=creation desc' \\\n  --data-urlencode 'limit_page_length=20' \\\n  'https://one.tatvacare.in/api/resource/Scheduled Job Log'\n```",
+        "parameters": [
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[[\"scheduled_job_type\",\"=\",\"templates_sync.scheduled_sync_all\"]]"
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "[\"name\",\"status\",\"creation\"]"
+          },
+          {
+            "name": "order_by",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "creation desc"
+          },
+          {
+            "name": "limit_page_length",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "20"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

@@ -2,26 +2,105 @@
 title: "WhatsApp"
 ---
 
-The CRM has a WhatsApp panel on every lead — agents chat with patients, send approved templates, and watch delivery status, all without leaving the lead. This page explains how that works underneath and what an integrator can read.
+The CRM has a WhatsApp panel on every lead — agents chat with patients, send approved templates, and watch delivery status, all without leaving the lead. WhatsApp is delivered through **WATI** (our provider); the CRM never talks to Meta directly. This page explains the model and the endpoints an integrator can call.
 
 ## The one idea: it's just a doctype
 
-Every WhatsApp message — inbound or outbound — is a row in the **`WhatsApp Message`** doctype. The lead's WhatsApp tab simply lists the rows whose `reference_doctype` + `reference_name` point at that lead. Because it's a doctype, you read a whole conversation over the same REST API as everything else. The fields that matter:
+Every WhatsApp message — inbound or outbound — is a row in the **`WhatsApp Message`** doctype. A lead's WhatsApp tab lists the rows whose `reference_doctype` + `reference_name` point at that lead. Because it's a doctype, you read a whole conversation over the same REST API as everything else. The fields that matter:
 
 - **`message`** — the body
 - **`type`** — `Incoming` or `Outgoing`
-- **`status`** — `SENT` / `Delivered` / `Read` / `Replied` / `Failed`
+- **`status`** — `sent` / `delivered` / `read` / `failed` (outgoing only)
 - **`from`** / **`to`** — the two numbers
-- **`whatsapp_account`** — which sender (WhatsApp number) it went through
+- **`whatsapp_account`** — which sender (WATI account / number) it went through
+- **`message_id`** — the provider's message id (used to thread status updates)
 
 ## How sending works
 
-The CRM never calls a WhatsApp provider directly. It **inserts a `WhatsApp Message` row**, and a transport layer behind the doctype does the actual send. We route that transport through **WATI** (our WhatsApp provider) so the chat experience, templates, and broadcasts the team already uses keep working unchanged.
+The CRM never calls a provider directly. It **inserts a `WhatsApp Message` row**, and the transport behind the doctype performs the actual send through **WATI** — so the chats, templates, and broadcasts the team already uses keep working unchanged. There is no path to Meta.
 
-Multi-sender is built in: one **`WhatsApp Account`** row per WhatsApp number, so different product lines or programs can send from different numbers. Inbound messages are matched back to the right account by the number that received them.
+Multi-sender is built in: one **`WhatsApp Account`** row per WATI tenant/number. Which account a lead sends through is decided by **routing rules** (see below), so different product lines / groups / programs send from different numbers. Inbound messages are attributed back to the account that received them.
 
-## Status
+> **Auth:** every call below uses the standard `Authorization: token KEY:SECRET` header and requires **System Manager** (these are not exposed to plain CRM users). The picker helpers used by the in-app dialog (`list_templates`, `get_field_options`, `get_template_variables`) are UI-internal and not part of this integration surface.
 
-> **Building now.** The WhatsApp surface ships with the WATI rollout. The `WhatsApp Message` doctype is **not yet live** on the API, so the endpoints below return `404` until it deploys — they document the contract you'll integrate against. Track progress with CRM Ops.
+---
 
-→ **API Reference:** [WhatsApp endpoints](/docs/api/whatsapp). The read pattern is identical to [reading a lead](/docs/api/leads#read-one-lead-with-embedded-profile-rows) — a filtered list against a doctype.
+## Read a lead's conversation
+
+A filtered list against the doctype — identical to reading any other doctype.
+
+```bash
+curl -G -H 'Authorization: token KEY:SECRET' \
+  --data-urlencode 'filters=[["reference_doctype","=","CRM Lead"],["reference_name","=","CRM-LEAD-2026-00123"]]' \
+  --data-urlencode 'fields=["type","message","status","from","to","whatsapp_account","creation"]' \
+  --data-urlencode 'order_by=creation asc' \
+  'https://one.tatvacare.in/api/resource/WhatsApp Message'
+```
+
+## Send an approved template
+
+Sends a WATI-approved template to a lead, filling its `{{1}}`, `{{2}}`… variables. Inserts a `WhatsApp Message` row; the WATI send + status threading happen behind it.
+
+```
+POST /api/method/tatva_connect.api.whatsapp.send_template_with_params
+```
+```json
+{
+  "reference_doctype": "CRM Lead",
+  "reference_name": "CRM-LEAD-2026-00123",
+  "template": "3_days_before_chemo::Anaya WATI 360078",
+  "to": "+919059067327",
+  "body_param": "{\"1\": \"Asha\", \"2\": \"12 Jun\"}"
+}
+```
+- `template` is the **account-scoped record name** (`templatename::Account`) — see the template list below.
+- `body_param` is a JSON object keyed by the real `{{N}}` index. Empty/static templates: omit it.
+- Returns the new `WhatsApp Message` name. The account is resolved from the lead's routing — a lead with no route is rejected (never sent through the wrong tenant).
+
+## Refresh / reconcile a thread from WATI
+
+Rebuilds **one lead's** thread from WATI's authoritative history (`getMessages`, all pages). Use it to rattle out any drift between WATI and the CRM. Scoped to that lead, idempotent (keyed on WATI's message id), and it **never re-sends**. Also wired to the **Refresh WhatsApp** button on the lead header.
+
+```
+POST /api/method/tatva_connect.api.whatsapp.refresh_messages_from_wati
+```
+```json
+{ "reference_doctype": "CRM Lead", "reference_name": "CRM-LEAD-2026-00123" }
+```
+Returns `{ "count": <messages rebuilt>, "account": "<WATI account>" }`.
+
+## Templates
+
+Templates are **managed on WATI**, not in Frappe — we mirror the approved ones read-only into the **`WhatsApp Templates`** doctype so the picker has a list. A scheduled job re-syncs every 6 hours; you can also sync on demand:
+
+```
+POST /api/method/tatva_connect.wati.templates_sync.sync_from_wati
+```
+- No body → syncs **every** WATI account. Pass `{"account_name": "Anaya WATI 360078"}` to sync just one.
+- Records are keyed per account (`name::Account`), so two tenants can share a template name without colliding; `actual_name` holds the real WATI send-name.
+
+List approved templates for an account:
+```bash
+curl -G -H 'Authorization: token KEY:SECRET' \
+  --data-urlencode 'filters=[["status","=","APPROVED"],["whatsapp_account","=","Anaya WATI 360078"]]' \
+  --data-urlencode 'fields=["name","actual_name","category","template"]' \
+  'https://one.tatvacare.in/api/resource/WhatsApp Templates'
+```
+
+## Inbound webhook (WATI → CRM)
+
+Register this URL on **each** WATI tenant. Inbound customer messages and delivery/read statuses land on the matching lead automatically.
+
+```
+https://one.tatvacare.in/api/method/tatva_connect.wati.webhook.webhook?token=<secret>&account=<WhatsApp Account name>
+```
+- `token` = the shared secret in **WATI Settings → Webhook Verify Token**.
+- `account` = which tenant received the message (so inbound is filed correctly without relying on a provider payload field).
+- Non-CRM traffic is dropped; redeliveries are de-duplicated.
+
+## Multi-account routing & kill-switch
+
+- **`WATI Account Routing`** — rules mapping a lead's **Product Line / Group / Program** to a `WhatsApp Account`. Most-specific wins (Program > Group > Product Line); no global default (an unmatched lead is blocked, not mis-sent); duplicate/ambiguous rules are rejected.
+- **`WATI Settings → Enabled`** — master kill-switch. When off, **both sending and receiving stop**.
+
+> **Rollout note:** the WhatsApp surface ships with the WATI integration. If a call returns `404`, the integration app isn't deployed on that environment yet — confirm with CRM Ops.
