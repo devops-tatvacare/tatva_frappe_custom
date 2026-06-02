@@ -1,4 +1,4 @@
-# tatva-frappe-custom
+# tatva_frappe_custom
 
 Single working repo for TatvaCare's custom Frappe CRM work — custom app code (hooks/overrides) **and** the API documentation portal.
 

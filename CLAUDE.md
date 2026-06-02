@@ -10,14 +10,22 @@ audience: any LLM (or new team member) starting work on this project
 
 The primer. If you (LLM or human) just walked into this project, read this in full before doing anything else. Every claim below is sourced from a doc in this folder — follow the wikilinks for detail.
 
-> **Read this first — what this file describes.** The sections further down (folder convention, "What lives where") describe the **Obsidian vault** (`Frappe Migration 101/`), which is the strategy/docs home. **This git repo (`tatva-frappe-custom`) is the CODE home** — its canonical layout is the next section. Rule of thumb: prose/strategy/runbooks → vault; code + buildable artifacts → this repo.
+> **Read this first — what this file describes.** The sections further down (folder convention, "What lives where") describe the **Obsidian vault** (`Frappe Migration 101/`), which is the strategy/docs home. **This git repo (`tatva_frappe_custom`) is the CODE home** — its canonical layout is the next section. Rule of thumb: prose/strategy/runbooks → vault; code + buildable artifacts → this repo.
+
+> **Repo home:** **https://github.com/devops-tatvacare/tatva_frappe_custom** (public). The single working repo for the custom Frappe app (WATI override, Acefone telephony, future overrides) **and** the API docs site.
+>
+> **Two deploy lanes (keep them straight):**
+> - **App code** (WATI/Acefone) → bake into the custom Docker image → reinstall (`apps.json` → rebuild `tatva-frappe:1.x` → `install-app`/`migrate`/`build`). Changes occasionally.
+> - **Docs content** (`api-docs/`) → fast file push: `VM_SSH_HOST=… VM_SSH_PW=… ./api-docs/deploy-docs.sh` → lands in the Frappe `sites` volume, served by nginx at `/docs`. Changes often; **never** rides the image rebuild.
+>
+> Secrets (VM host/password) are **env vars**, never committed — this repo is public.
 
 ## This repository — canonical layout (codified, do not reinvent)
 
-`tatva-frappe-custom` is a **standard Frappe app repo** (installable via `bench get-app`) that also carries the API docs site. Layout grounded in the live `frappe/crm` + `frappe/helpdesk` apps and the [official Frappe app docs](https://docs.frappe.io/framework/user/en/basics/apps).
+`tatva_frappe_custom` is a **standard Frappe app repo** (installable via `bench get-app`) that also carries the API docs site. Layout grounded in the live `frappe/crm` + `frappe/helpdesk` apps and the [official Frappe app docs](https://docs.frappe.io/framework/user/en/basics/apps).
 
 ```
-tatva-frappe-custom/                 # this git repo;  install with:  bench get-app <repo-url>
+tatva_frappe_custom/                 # this git repo;  install with:  bench get-app <repo-url>
 ├── <app_name>/                      # ← the Frappe app PACKAGE. Create with `bench new-app <app_name>`.
 │   │                                #   app_name = snake_case python identifier (e.g. tatva_crm).
 │   │                                #   Repo/GitHub name MAY differ from app_name.
@@ -41,7 +49,7 @@ tatva-frappe-custom/                 # this git repo;  install with:  bench get-
 ```
 
 **Codified rules (so we never re-decide):**
-1. **Scaffold with `bench new-app <app_name>`** — never hand-build the skeleton. `app_name` is snake_case (valid python identifier); the repo/GitHub name can differ (`tatva-frappe-custom`).
+1. **Scaffold with `bench new-app <app_name>`** — never hand-build the skeleton. `app_name` is snake_case (valid python identifier); the repo/GitHub name can differ (`tatva_frappe_custom`).
 2. **`pyproject.toml`, not `setup.py`** — the v15 standard (older Frappe docs still show `setup.py`/`requirements.txt`; ignore that). Verified in the live `crm`/`helpdesk` apps.
 3. **All customization goes through `hooks.py`**: `doc_events` (validate / on_update), `override_doctype_class` (swap a controller), `override_whitelisted_methods` (swap an API), `scheduler_events` (cron), `app_include_js/css` (assets). No monkey-patching scattered elsewhere.
 4. **Schema as code via fixtures** — put `fixtures = ["Custom Field", "Property Setter", ...]` in `hooks.py`, run `bench export-fixtures`. Custom fields/property setters become version-controlled JSON, auto-applied on `bench migrate`. ★ This is the real "don't reinvent" win — it replaces the manual field creation in redeploy-runbook Phases 11–12.

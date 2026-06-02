@@ -10,3 +10,7 @@ dist/
 # python
 __pycache__/
 *.pyc
+
+# secrets / local env
+.env
+.secrets

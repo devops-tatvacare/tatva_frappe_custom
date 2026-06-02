@@ -9,7 +9,9 @@
 # Requires: node, npm, expect.   Run:  ./deploy-docs.sh   (from this api-docs/ dir)
 set -euo pipefail
 
-VM=10.50.16.9 ; SSHUSER=frappe ; PW='nVm6YgmX8j6V'
+# VM connection details come from the environment — NEVER hardcode them (this repo is public).
+#   export VM_SSH_HOST='<vm-ip-or-host>'  VM_SSH_PW='<password>'  [VM_SSH_USER=frappe]
+VM="${VM_SSH_HOST:?Set VM_SSH_HOST (the VM IP/host)}" ; SSHUSER="${VM_SSH_USER:-frappe}" ; PW="${VM_SSH_PW:?Set VM_SSH_PW (the VM SSH password)}"
 DEST=/home/frappe/frappe-bench/sites/crm.local/public
 PROJ="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJ"
