@@ -24,6 +24,29 @@ from tatva_connect.wati import api as wati
 
 
 class WATIWhatsAppMessage(WhatsAppMessage):
+	def set_whatsapp_account(self):
+		"""Pick the WATI account by the lead's taxonomy (Program > Group > Product Line).
+
+		No global default: if nothing is set and no routing rule matches, we raise
+		rather than fall back to a default account — so a lead can never be sent
+		through the wrong tenant. Inbound rows arrive with the account already
+		stamped (by the webhook), so this is a no-op for them.
+		"""
+		if self.whatsapp_account:
+			return
+		from tatva_connect.wati import routing
+
+		account = routing.resolve_for_message(self)
+		if not account:
+			frappe.throw(
+				_(
+					"No WATI Account Routing rule matches this lead's Product Line / Group / "
+					"Program. Configure WATI Account Routing before sending."
+				),
+				title=_("No WATI route"),
+			)
+		self.whatsapp_account = account
+
 	def _wati_account(self):
 		"""Return the linked WhatsApp Account doc iff it's a WATI tenant, else None."""
 		if not self.whatsapp_account:

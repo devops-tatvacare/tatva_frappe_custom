@@ -49,8 +49,11 @@ def _lead_for_number(wa_digits: str):
 	)
 
 
-def _default_wati_account():
-	return frappe.db.get_value("WhatsApp Account", {"custom_is_wati": 1}, "name")
+def _account_for_channel(channel_number):
+	"""Map the WABA number that received the message -> its WhatsApp Account."""
+	from tatva_connect.wati import routing
+
+	return routing.account_for_channel(channel_number)
 
 
 def _is_crm_relevant(event: dict) -> bool:
@@ -125,7 +128,7 @@ def _ingest_inbound(event: dict):
 			"message_id": wamid,
 			"conversation_id": event.get("conversationId"),
 			"profile_name": event.get("senderName"),
-			"whatsapp_account": _default_wati_account(),
+			"whatsapp_account": _account_for_channel(event.get("channelPhoneNumber")),
 			"reference_doctype": "CRM Lead",
 			"reference_name": lead,
 		}

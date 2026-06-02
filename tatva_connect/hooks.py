@@ -25,7 +25,10 @@ override_whitelisted_methods = {
 # Schema-as-code: the custom_is_wati flag on WhatsApp Account ships as a fixture
 # (the WATI Settings doctype ships as its own doctype JSON in this app).
 fixtures = [
-	{"dt": "Custom Field", "filters": [["name", "in", ["WhatsApp Account-custom_is_wati"]]]},
+	{
+		"dt": "Custom Field",
+		"filters": [["name", "in", ["WhatsApp Account-custom_is_wati", "WhatsApp Account-custom_wati_channel_number"]]],
+	},
 ]
 
 # Apps
