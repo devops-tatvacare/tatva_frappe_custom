@@ -1123,12 +1123,12 @@
         "summary": "Full \u2014 oncology PSP lead (drug program + care team)",
         "description": "Realistic shape for an Anaya Sigrima clinical lead. Plan Profile has drug-specific fields + the program substage; Care & Providers has the assigned coach + doctor + hospital.",
         "value": {
-          "mobile_no": "+919501523860",
-          "first_name": "Mandeep Singh",
-          "custom_dob": "1981-03-09",
+          "mobile_no": "+919800000001",
+          "first_name": "Sunita Rao",
+          "custom_dob": "1980-01-01",
           "custom_gender": "Female",
-          "custom_caregiver_name": "Ravi",
-          "custom_caregiver_phone": "+919898000111",
+          "custom_caregiver_name": "Arjun Rao",
+          "custom_caregiver_phone": "+919800000011",
           "custom_caregiver_relation": "Spouse",
           "status": "New",
           "source": "Landing Page MR Form",
@@ -1147,11 +1147,11 @@
           ],
           "custom_care_providers_profile": [
             {
-              "abm_name": "Shreenika BS",
-              "success_coach_name": "Priya Sharma",
-              "doctor_name": "Dr. Karthik S Udupa",
-              "hospital_name": "Kasturba Manipal",
-              "hospital_city": "Udupi"
+              "abm_name": "Vikram Iyer",
+              "success_coach_name": "Neha Gupta",
+              "doctor_name": "Dr. A. Sharma",
+              "hospital_name": "City Oncology Centre",
+              "hospital_city": "Pune"
             }
           ]
         }
@@ -1160,8 +1160,8 @@
         "summary": "Full \u2014 wellness subscription lead (plan + score + care team)",
         "description": "Realistic shape for a MyTatva-style subscription sign-up. Plan Profile carries subscription + UTM; Lab Profile carries metabolic score; Care & Providers carries the assigned coach stack.",
         "value": {
-          "mobile_no": "+919059067327",
-          "first_name": "Asha",
+          "mobile_no": "+919800000002",
+          "first_name": "Kabir Shah",
           "status": "New",
           "source": "Mobile App",
           "custom_vertical": "GoodFlip",
@@ -1188,9 +1188,9 @@
           ],
           "custom_care_providers_profile": [
             {
-              "success_coach_name": "Priya Patel",
-              "rm_name": "Ravi Iyer",
-              "diet_coach_name": "Anjali K"
+              "success_coach_name": "Neha Gupta",
+              "rm_name": "Sanjay Menon",
+              "diet_coach_name": "Divya Rao"
             }
           ]
         }

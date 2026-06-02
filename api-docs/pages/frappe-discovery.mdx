@@ -1,0 +1,19 @@
+---
+title: "Discovery — introspect, don't hardcode"
+---
+
+The CRM's fields evolve — new verticals add new profile fields over time. So **don't hardcode the field list in your integration.** Ask the CRM what fields a DocType has, at runtime.
+
+A DocType's own definition is itself a document (in the `DocType` DocType — yes, really), so you read its schema over the same REST API:
+
+```
+GET /api/resource/DocType/CRM Lead
+```
+
+You get back every field with its `fieldname`, `label`, `fieldtype`, and — for `Select`/`Link` fields — its allowed `options`. That tells you exactly what you can write, what type each field is, and which values a `Link`/`Select` will accept, with no guessing and no waiting on a docs update.
+
+**The pattern to build:** *read the schema → map your data → write.* When we add a field, your code adapts instead of breaking. Pair this with the [Reference Data](/docs/api/reference-data) lookups for the live valid values of status, source, program, and the rest.
+
+**Example:** before pushing leads with a new `custom_current_program`, introspect `CRM Program` to confirm the program exists rather than hardcoding a name that may have been renamed.
+
+→ **Try it:** [Introspect a doctype's full schema](/docs/api/schema#introspect-a-doctypes-full-schema).

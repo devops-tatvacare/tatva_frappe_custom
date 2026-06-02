@@ -1,0 +1,17 @@
+---
+title: "Permissions in 60 seconds"
+---
+
+One rule prevents most surprises: **an API key authenticates *as a user*, and runs the exact same permission checks as the web UI. A key never bypasses permissions.**
+
+So what a token can do = what its user's **roles** allow. Permissions are set per Role × DocType, with separate flags for Read / Write / Create / **Delete** / and more.
+
+In practice:
+
+- Your key is tied to a dedicated integration user. If that user's role has Read + Write + Create but **not** Delete, then `DELETE /api/resource/CRM Lead/{name}` returns **403** — safe by design.
+- Some fields are **permission-locked** — e.g. the routing fields `custom_vertical`, `custom_psp_group`, `custom_current_program`. A normal user silently *drops* those on write; that's why integration keys are issued with a role that can set them.
+- Writes are still validated regardless of role: `Link` values must exist, required fields can't be empty — the key can't get around that.
+
+**Why it matters for you:** if a write seems to "succeed" but a field didn't stick, it's almost always a permission level on that field — not a bug in your payload. Ask for a key scoped to exactly what your integration needs (and no more).
+
+→ **Try it:** [Verify your API key](/docs/api/authentication#verify-api-key-handshake) — it returns the user your key acts as.

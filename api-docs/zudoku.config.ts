@@ -13,6 +13,7 @@ const config: ZudokuConfig = {
       icon: "book",
       items: [
         { type: "category", label: "Start here", items: ["introduction", "welcome", "quickstart"] },
+        { type: "category", label: "Frappe in plain English", items: ["frappe-doctypes", "frappe-child-tables", "frappe-rest-api", "frappe-discovery", "frappe-permissions"] },
         { type: "category", label: "Architecture", items: ["concepts"] },
         { type: "category", label: "Reference", items: ["errors", "operations"] },
       ],
