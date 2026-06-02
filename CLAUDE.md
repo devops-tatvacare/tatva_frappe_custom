@@ -10,6 +10,46 @@ audience: any LLM (or new team member) starting work on this project
 
 The primer. If you (LLM or human) just walked into this project, read this in full before doing anything else. Every claim below is sourced from a doc in this folder — follow the wikilinks for detail.
 
+> **Read this first — what this file describes.** The sections further down (folder convention, "What lives where") describe the **Obsidian vault** (`Frappe Migration 101/`), which is the strategy/docs home. **This git repo (`tatva-frappe-custom`) is the CODE home** — its canonical layout is the next section. Rule of thumb: prose/strategy/runbooks → vault; code + buildable artifacts → this repo.
+
+## This repository — canonical layout (codified, do not reinvent)
+
+`tatva-frappe-custom` is a **standard Frappe app repo** (installable via `bench get-app`) that also carries the API docs site. Layout grounded in the live `frappe/crm` + `frappe/helpdesk` apps and the [official Frappe app docs](https://docs.frappe.io/framework/user/en/basics/apps).
+
+```
+tatva-frappe-custom/                 # this git repo;  install with:  bench get-app <repo-url>
+├── <app_name>/                      # ← the Frappe app PACKAGE. Create with `bench new-app <app_name>`.
+│   │                                #   app_name = snake_case python identifier (e.g. tatva_crm).
+│   │                                #   Repo/GitHub name MAY differ from app_name.
+│   ├── __init__.py                  #   holds __version__
+│   ├── hooks.py                     # ★ ALL customization registers here (see rules below)
+│   ├── modules.txt   patches.txt    #   module list / data-migration patches (run on `bench migrate`)
+│   ├── config/                      #   desktop.py, docs.py
+│   ├── <module>/doctype/<dt>/       #   custom doctypes live under a module
+│   ├── overrides/                   #   override classes (referenced from hooks.py)
+│   ├── api/                         #   @frappe.whitelist() endpoints
+│   ├── public/{js,css}/             #   bundled frontend assets
+│   ├── templates/   www/            #   jinja templates / web pages
+│   ├── fixtures/                    #   exported Custom Field / Property Setter (auto-applied on migrate)
+│   └── tests/
+├── api-docs/                        # Zudoku docs site (served at /docs). NOT part of the app —
+│   │                                #   mirrors how frappe/crm keeps its Vue `frontend/` in the same repo.
+│   └── zudoku.config.ts, package.json, openapi.json, pages/*.mdx, deploy-docs.sh
+├── nginx/frappe.conf.template       # Frappe frontend nginx template + the permanent /docs route
+├── pyproject.toml                   # ★ app packaging — Frappe v15 uses pyproject.toml, NOT setup.py
+├── README.md   license.txt   .gitignore   # .gitignore excludes node_modules/, dist/, __pycache__/
+```
+
+**Codified rules (so we never re-decide):**
+1. **Scaffold with `bench new-app <app_name>`** — never hand-build the skeleton. `app_name` is snake_case (valid python identifier); the repo/GitHub name can differ (`tatva-frappe-custom`).
+2. **`pyproject.toml`, not `setup.py`** — the v15 standard (older Frappe docs still show `setup.py`/`requirements.txt`; ignore that). Verified in the live `crm`/`helpdesk` apps.
+3. **All customization goes through `hooks.py`**: `doc_events` (validate / on_update), `override_doctype_class` (swap a controller), `override_whitelisted_methods` (swap an API), `scheduler_events` (cron), `app_include_js/css` (assets). No monkey-patching scattered elsewhere.
+4. **Schema as code via fixtures** — put `fixtures = ["Custom Field", "Property Setter", ...]` in `hooks.py`, run `bench export-fixtures`. Custom fields/property setters become version-controlled JSON, auto-applied on `bench migrate`. ★ This is the real "don't reinvent" win — it replaces the manual field creation in redeploy-runbook Phases 11–12.
+5. **Docs live in `api-docs/`** (build/deploy via `api-docs/deploy-docs.sh`; the `/docs` nginx route is `nginx/frappe.conf.template`). See [[project_docs_portal]] / vault runbook Phase 17.
+6. **Install path:** `bench get-app <repo-url>` → `bench --site crm.local install-app <app_name>` → for prod, add to the custom image's `apps.json` and rebuild (vault runbook Phases 2–3).
+
+Sources: [Frappe app basics](https://docs.frappe.io/framework/user/en/basics/apps) · [fixtures on install](https://docs.frappe.io/framework/user/en/guides/app-development/how-to-create-custom-fields-during-app-installation) · live `frappe/crm` + `frappe/helpdesk` (pyproject.toml + in-repo `frontend/`).
+
 ## What this folder is
 
 The single source of truth for the TatvaCare Frappe CRM migration. Replaces LeadSquared. One Frappe install on one Azure VM. One folder for everything: infra, app config, data model, migration, integrations, runbooks, scripts.
